@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { Save, X, Wine, MapPin, Calendar, DollarSign, Percent } from 'lucide-react';
+import { Save, X, Wine, MapPin, Calendar, DollarSign, Percent, Package } from 'lucide-react';
 
 const TIPOLOGIE = ['Rossi', 'Bianchi', 'Rosati', 'Bollicine', 'Champagne', 'Passito/Dolce', 'Macerato'];
 const REGIONI = ['Piemonte', 'Valle d\'Aosta', 'Lombardia', 'Trentino-Alto Adige', 'Veneto', 'Friuli Venezia Giulia', 'Liguria', 'Emilia-Romagna', 'Toscana', 'Umbria', 'Marche', 'Lazio', 'Abruzzo', 'Molise', 'Campania', 'Puglia', 'Basilicata', 'Calabria', 'Sardegna', 'Sicilia', 'Estero'];
@@ -19,34 +19,24 @@ function WineForm({ existingWine, onSave, onCancel }) {
     return {
       nome_vino: '', cantina: '', uvaggio: '', tipologia: 'Rossi', denominazione: '',
       anno_imbottigliamento: '', regione: 'Toscana', gradazione: '', prezzo_acquisto: '',
-      data_acquisto: new Date().toISOString().split('T')[0], posizione: '', note_generali: '', in_stock: true
+      data_acquisto: new Date().toISOString().split('T')[0], posizione: '', note_generali: '', in_stock: true,
+      quantita: 1 // Default 1 bottiglia
     };
   });
 
-  useEffect(() => {
-    if (existingWine) setFormData(existingWine);
-  }, [existingWine]);
-
-  useEffect(() => {
-    if (!existingWine) localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
-  }, [formData, existingWine]);
+  useEffect(() => { if (existingWine) setFormData(existingWine); }, [existingWine]);
+  useEffect(() => { if (!existingWine) localStorage.setItem(DRAFT_KEY, JSON.stringify(formData)); }, [formData, existingWine]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // ✅ FUNZIONE DI PULIZIA DATI
   const cleanData = (data) => {
     const cleaned = { ...data };
-    // Lista dei campi che nel database sono numeri
-    const numericFields = ['anno_imbottigliamento', 'gradazione', 'prezzo_acquisto'];
-    
+    const numericFields = ['anno_imbottigliamento', 'gradazione', 'prezzo_acquisto', 'quantita'];
     numericFields.forEach(field => {
-      // Se il campo è una stringa vuota, lo trasformiamo in null
-      if (cleaned[field] === '') {
-        cleaned[field] = null;
-      }
+      if (cleaned[field] === '') cleaned[field] = null;
     });
     return cleaned;
   };
@@ -55,37 +45,27 @@ function WineForm({ existingWine, onSave, onCancel }) {
     e.preventDefault();
     setLoading(true);
     try {
-      // Puliamo i dati prima di inviarli
       const dataToSave = cleanData(formData);
-
       if (existingWine) {
         const { error } = await supabase.from('diar_wines').update(dataToSave).eq('id', existingWine.id);
         if (error) throw error;
       } else {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Utente non autenticato");
-
-        const { error } = await supabase
-          .from('diar_wines')
-          .insert([{ ...dataToSave, user_id: user.id }]);
+        const { error } = await supabase.from('diar_wines').insert([{ ...dataToSave, user_id: user.id }]);
         if (error) throw error;
         localStorage.removeItem(DRAFT_KEY);
       }
       onSave();
     } catch (error) {
-      console.error("Errore dettagliato:", error);
-      alert('Errore durante il salvataggio: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
+      alert('Errore: ' + error.message);
+    } finally { setLoading(false); }
   };
 
   return (
     <div className="bg-white p-6 rounded-3xl shadow-2xl border border-gray-100 animate-in zoom-in duration-300">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-winelink-red flex items-center gap-2">
-          <Wine /> {existingWine ? 'Modifica Bottiglia' : 'Nuova Bottiglia'}
-        </h2>
+        <h2 className="text-2xl font-bold text-winelink-red flex items-center gap-2"><Wine /> {existingWine ? 'Modifica Bottiglia' : 'Nuova Bottiglia'}</h2>
         <button onClick={onCancel} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X /></button>
       </div>
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -110,6 +90,15 @@ function WineForm({ existingWine, onSave, onCancel }) {
         <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Data Acquisto</label><input type="date" name="data_acquisto" value={formData.data_acquisto} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
         <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Gradazione</label><input type="number" step="0.1" name="gradazione" value={formData.gradazione} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
         <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Prezzo</label><input type="number" step="0.01" name="prezzo_acquisto" value={formData.prezzo_acquisto} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
+        
+        {/* NUOVO CAMPO QUANTITÀ */}
+        <div className="space-y-1">
+          <label className="text-xs font-bold text-gray-500 uppercase ml-1 flex items-center gap-1">
+            <Package size={12}/> Quantità Bottiglie
+          </label>
+          <input type="number" name="quantita" value={formData.quantita} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" min="1" />
+        </div>
+
         <div className="space-y-1 md:col-span-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Posizione</label><input name="posizione" value={formData.posizione} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
         <div className="space-y-1 md:col-span-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Note</label><textarea name="note_generali" value={formData.note_generali} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none h-24" /></div>
         <div className="md:col-span-2 mt-4">

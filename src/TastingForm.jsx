@@ -20,36 +20,50 @@ function TastingForm({ wine, onComplete, onCancel }) {
     setLoading(true);
 
     try {
-      // 1. Inserisci la degustazione
+      // 1. Inserisci la degustazione nella tabella dei tasting
       const { error: tasteError } = await supabase
         .from('diar_tastings')
         .insert([{ ...formData, wine_id: wine.id }]);
 
       if (tasteError) throw tasteError;
 
-      // 2. Rimuovi il vino dallo stock (in_stock = false)
+      // 2. LOGICA QUANTITÀ: Sottrai 1 bottiglia dallo stock
+      const currentQty = wine.quantita || 1;
+      const newQty = currentQty - 1;
+      
+      const updateData = { quantita: newQty };
+      
+      // Se la quantità arriva a 0 o meno, il vino non è più in stock
+      if (newQty <= 0) {
+        updateData.in_stock = false;
+      }
+
       const { error: stockError } = await supabase
         .from('diar_wines')
-        .update({ in_stock: false })
+        .update(updateData)
         .eq('id', wine.id);
 
       if (stockError) throw stockError;
 
-      alert('Degustazione salvata! La bottiglia è stata spostata nello storico. 🥂');
+      alert(newQty > 0 
+        ? `Degustazione salvata! Hai ancora ${newQty} bottiglie in cantina. 🍷` 
+        : 'Ultima bottiglia bevuta! Spostata nello storico. 🥂'
+      );
+      
       onComplete();
     } catch (error) {
       console.error(error);
-      alert('Errore durante il salvataggio.');
+      alert('Errore durante il salvataggio della degustazione.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="bg-white p-6 rounded-3xl shadow-2xl border border-gray-100 animate-in zoom-in duration-300">
+    <div className="bg-white p-6 rounded-3xl shadow-2xl border border-gray-100 animate-in zoom-in duration-300 max-w-lg w-full">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-winelink-red">Scheda Degustazione</h2>
-        <button onClick={onCancel} className="text-gray-400">X</button>
+        <h2 className="text-2xl font-bold text-winelink-red">Degustazione</h2>
+        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">X</button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -79,13 +93,13 @@ function TastingForm({ wine, onComplete, onCancel }) {
           />
         </div>
 
-        {/* TOGGLE SCHEDA COMPLETA FIS */}
+        {/* TOGGLE ANALISI DETTAGLIATA */}
         <button 
           type="button"
           onClick={() => setIsFull(!isFull)}
           className="w-full flex items-center justify-between p-3 bg-winelink-red/10 text-winelink-red rounded-xl font-bold text-sm"
         >
-          {isFull ? 'Chiudi Scheda FIS' : 'Apri Scheda FIS Completa 📜'}
+          {isFull ? 'Chiudi Analisi' : 'Apri Analisi Dettagliata 📜'}
           {isFull ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}
         </button>
 
@@ -94,14 +108,14 @@ function TastingForm({ wine, onComplete, onCancel }) {
             <FISInput label="Analisi Visiva" name="fis_visivo" value={formData.fis_visivo} onChange={setFormData} placeholder="Colore, limpidità..." />
             <FISInput label="Analisi Olfattiva" name="fis_olfattivo" value={formData.fis_olfattivo} onChange={setFormData} placeholder="Intensità, profumi..." />
             <FISInput label="Analisi Gustativa" name="fis_gustativo" value={formData.fis_gustativo} onChange={setFormData} placeholder="Equilibrio, persistenza..." />
-            <FISInput label="Conclusione FIS" name="fis_conclusione" value={formData.fis_conclusione} onChange={setFormData} placeholder="Giudizio finale..." />
+            <FISInput label="Conclusione" name="fis_conclusione" value={formData.fis_conclusione} onChange={setFormData} placeholder="Giudizio finale..." />
             <FISInput label="Abbinamento Cibo" name="abbinamento_cibo" value={formData.abbinamento_cibo} onChange={setFormData} placeholder="Con cosa l'hai bevuto?" />
           </div>
         )}
 
         <button 
           disabled={loading}
-          className="w-full bg-winelink-red text-white p-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg disabled:bg-gray-400"
+          className="w-full bg-winelink-red text-white p-4 rounded-2xl font-bold flex items-center justify-center gap-2 shadow-lg disabled:bg-gray-400 transition-all active:scale-95"
         >
           {loading ? 'Salvataggio...' : <><Save size={20}/> Conferma Degustazione</>}
         </button>
@@ -111,22 +125,6 @@ function TastingForm({ wine, onComplete, onCancel }) {
 }
 
 function FISInput({ label, name, value, onChange, placeholder }) {
-  return (
-    <div className="space-y-1">
-      <label className="text-[10px] font-bold text-gray-400 uppercase">{label}</label>
-      <input 
-        className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none"
-        placeholder={placeholder}
-        value={value}
-        onChange={e => onChange({...value, [name]: e.target.value})} // Nota: qui passiamo l'intero stato
-      />
-    </div>
-  );
-}
-
-// Correzione piccola per FISInput per gestire lo stato correttamente
-// Sostituisci la funzione FISInput con questa versione corretta:
-function FISInputCorrected({ label, name, value, onChange, placeholder }) {
   return (
     <div className="space-y-1">
       <label className="text-[10px] font-bold text-gray-400 uppercase">{label}</label>

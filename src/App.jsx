@@ -16,6 +16,7 @@ function App() {
   const [isTasting, setIsTasting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
+  // STATI PER RICERCA E FILTRI
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('Tutti');
 
@@ -70,17 +71,26 @@ function App() {
     setWines([]);
   }
 
+  // CALCOLO STATISTICHE DINAMICHE (Somma delle quantità)
   const statsMap = wines.reduce((acc, wine) => {
     const tipo = wine.tipologia || 'Non specificato';
-    acc[tipo] = (acc[tipo] || 0) + 1;
+    const qty = wine.quantita || 1;
+    acc[tipo] = (acc[tipo] || 0) + qty;
     return acc;
   }, {});
+
+  const stats = {
+    total: wines.reduce((sum, w) => sum + (w.quantita || 1), 0),
+    stock: wines.filter(w => w.in_stock).reduce((sum, w) => sum + (w.quantita || 1), 0),
+    categories: statsMap 
+  };
 
   if (loading) return <div className="flex justify-center items-center h-screen text-gray-500 font-medium">Caricamento... 🍷</div>;
   if (!session) return <Auth />;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
+      {/* HEADER */}
       <header className="bg-winelink-red text-white p-6 shadow-lg sticky top-0 z-50 flex justify-between items-center">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Wine /> WineLink <span className="text-sm font-light opacity-80">| Cantina</span>
@@ -89,12 +99,13 @@ function App() {
       </header>
 
       <main className="p-4 max-w-4xl mx-auto">
+        {/* VISTA DASHBOARD */}
         {view === 'dashboard' && !selectedWine && !isEditing && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard label="Totale" value={wines.length} color="bg-white" />
-              <StatCard label="In Stock" value={wines.filter(w => w.in_stock).length} color="bg-winelink-green text-white" />
-              {Object.entries(statsMap).map(([tipo, count]) => (
+              <StatCard label="Totale Bottiglie" value={stats.total} color="bg-white" />
+              <StatCard label="In Stock" value={stats.stock} color="bg-winelink-green text-white" />
+              {Object.entries(stats.categories).map(([tipo, count]) => (
                 <StatCard key={tipo} label={tipo} value={count} color="bg-gray-100" />
               ))}
             </div>
@@ -123,6 +134,7 @@ function App() {
           </div>
         )}
 
+        {/* VISTA INVENTARIO (RICERCA, FILTRI E DESIGN PREMIUM) */}
         {view === 'inventory' && !selectedWine && !isEditing && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <h2 className="text-2xl font-bold text-gray-800">La mia Cantina</h2>
@@ -164,7 +176,6 @@ function App() {
                     onClick={() => setSelectedWine(wine)}
                     className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-winelink-red cursor-pointer hover:shadow-md hover:bg-gray-50 transition-all group"
                   >
-                    {/* HEADER DELLA CARD: Nome e Tipologia sulla stessa riga */}
                     <div className="flex justify-between items-start gap-2 mb-2">
                       <p className="font-bold text-lg leading-tight group-hover:text-winelink-red transition-colors flex-1">
                         {wine.nome_vino}
@@ -174,13 +185,10 @@ function App() {
                       </span>
                     </div>
 
-                    {/* CORPO DELLA CARD */}
                     <div className="space-y-2">
                       <p className="text-sm text-gray-600">
                         <span className="font-semibold">{wine.cantina}</span> • {wine.anno_imbottigliamento}
                       </p>
-                      
-                      {/* PILLOLE DETTAGLI: Ora con wrap perfetto per mobile */}
                       <div className="flex flex-wrap gap-2 text-xs text-gray-500">
                         <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md border border-gray-200">
                           🍇 {wine.uvaggio || 'N/D'}
@@ -190,6 +198,9 @@ function App() {
                         </span>
                         <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md border border-gray-200">
                           📅 Acq: {wine.data_acquisto || 'N/D'}
+                        </span>
+                        <span className="flex items-center gap-1 bg-winelink-green/10 text-winelink-green px-2 py-1 rounded-md border border-winelink-green/20 font-bold">
+                          📦 {wine.quantita || 1} bottiglie
                         </span>
                       </div>
                     </div>
