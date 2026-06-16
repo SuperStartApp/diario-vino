@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+  --color-winelink-red: #992235;
+  --color-winelink-green: #61CE70;
+  --color-winelink-yellow: #EEB336;
+}
+
+body {
+  background-color: #fdfdfd;
+  color: #333;
+  font-family: 'Inter', sans-serif;
+}
