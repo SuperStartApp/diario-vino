@@ -16,7 +16,6 @@ function App() {
   const [isTasting, setIsTasting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  // --- NUOVI STATI PER RICERCA E FILTRI ---
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('Tutti');
 
@@ -82,21 +81,14 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
-      {/* HEADER */}
       <header className="bg-winelink-red text-white p-6 shadow-lg sticky top-0 z-50 flex justify-between items-center">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Wine /> WineLink <span className="text-sm font-light opacity-80">| Cantina</span>
         </h1>
-        <button 
-          onClick={handleLogout}
-          className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full transition-colors"
-        >
-          Esci
-        </button>
+        <button onClick={handleLogout} className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full transition-colors">Esci</button>
       </header>
 
       <main className="p-4 max-w-4xl mx-auto">
-        {/* VISTA DASHBOARD */}
         {view === 'dashboard' && !selectedWine && !isEditing && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -131,12 +123,10 @@ function App() {
           </div>
         )}
 
-        {/* VISTA INVENTARIO (AGGIORNATA CON RICERCA E FILTRI) */}
         {view === 'inventory' && !selectedWine && !isEditing && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <h2 className="text-2xl font-bold text-gray-800">La mia Cantina</h2>
 
-            {/* AREA FILTRI */}
             <div className="flex flex-col md:flex-row gap-3 mb-6">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-3 text-gray-400" size={20} />
@@ -148,7 +138,6 @@ function App() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              
               <select 
                 className="p-3 bg-white border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-winelink-red outline-none transition-all cursor-pointer"
                 value={filterType}
@@ -161,7 +150,6 @@ function App() {
               </select>
             </div>
 
-            {/* LISTA VINI FILTRATA */}
             <div className="grid gap-3">
               {wines
                 .filter(w => w.in_stock)
@@ -174,18 +162,26 @@ function App() {
                   <div 
                     key={wine.id} 
                     onClick={() => setSelectedWine(wine)}
-                    className="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center border-l-4 border-winelink-red cursor-pointer hover:shadow-md hover:bg-gray-50 transition-all group"
+                    className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-winelink-red cursor-pointer hover:shadow-md hover:bg-gray-50 transition-all group"
                   >
-                    <div className="space-y-2">
-                      <p className="font-bold text-lg leading-tight group-hover:text-winelink-red transition-colors">
+                    {/* HEADER DELLA CARD: Nome e Tipologia sulla stessa riga */}
+                    <div className="flex justify-between items-start gap-2 mb-2">
+                      <p className="font-bold text-lg leading-tight group-hover:text-winelink-red transition-colors flex-1">
                         {wine.nome_vino}
                       </p>
+                      <span className="text-[10px] bg-winelink-red/10 text-winelink-red px-2 py-1 rounded-full font-bold whitespace-nowrap">
+                        {wine.tipologia}
+                      </span>
+                    </div>
+
+                    {/* CORPO DELLA CARD */}
+                    <div className="space-y-2">
                       <p className="text-sm text-gray-600">
                         <span className="font-semibold">{wine.cantina}</span> • {wine.anno_imbottigliamento}
                       </p>
                       
-                      {/* DETTAGLI MIGLIORATI: PILLOLE GRIGIE LEGGIBILI */}
-                      <div className="flex flex-wrap gap-y-1 gap-x-3 text-xs text-gray-500 mt-2">
+                      {/* PILLOLE DETTAGLI: Ora con wrap perfetto per mobile */}
+                      <div className="flex flex-wrap gap-2 text-xs text-gray-500">
                         <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md border border-gray-200">
                           🍇 {wine.uvaggio || 'N/D'}
                         </span>
@@ -196,11 +192,6 @@ function App() {
                           📅 Acq: {wine.data_acquisto || 'N/D'}
                         </span>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs bg-winelink-red/10 text-winelink-red px-3 py-1 rounded-full font-bold">
-                        {wine.tipologia}
-                      </span>
                     </div>
                   </div>
                 ))}
@@ -214,7 +205,6 @@ function App() {
           </div>
         )}
 
-        {/* VISTA DETTAGLIO VINO */}
         {selectedWine && !isEditing && (
           <WineDetail 
             wine={selectedWine} 
@@ -225,7 +215,6 @@ function App() {
           />
         )}
 
-        {/* VISTA MODIFICA VINO */}
         {isEditing && (
           <div className="max-w-2xl mx-auto">
             <WineForm 
@@ -236,7 +225,6 @@ function App() {
           </div>
         )}
 
-        {/* VISTA AGGIUNGI VINO */}
         {view === 'add' && !isEditing && (
           <div className="max-w-2xl mx-auto">
             <WineForm 
@@ -246,7 +234,6 @@ function App() {
           </div>
         )}
 
-        {/* VISTA STORICO */}
         {view === 'history' && (
           <div className="space-y-4 animate-in fade-in duration-500">
             <h2 className="text-2xl font-bold text-gray-800">Vini Degustati</h2>
@@ -262,7 +249,6 @@ function App() {
         )}
       </main>
 
-      {/* MODALE DEGUSTAZIONE */}
       {isTasting && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
           <TastingForm 
@@ -273,7 +259,6 @@ function App() {
         </div>
       )}
 
-      {/* NAVIGAZIONE */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around p-3 shadow-2xl z-50">
         <NavButton active={view === 'dashboard' && !selectedWine && !isEditing} onClick={() => {setView('dashboard'); setSelectedWine(null); setIsEditing(false);}} icon={<LayoutDashboard />} label="Home" />
         <NavButton active={view === 'inventory' && !selectedWine && !isEditing} onClick={() => {setView('inventory'); setSelectedWine(null); setIsEditing(false);}} icon={<Search />} label="Cantina" />
