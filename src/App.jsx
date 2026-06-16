@@ -113,7 +113,7 @@ function App() {
             <div className="space-y-3">
               <h2 className="text-xl font-semibold text-gray-700 flex items-center gap-2">Consigli del Sommelier</h2>
               {wines.filter(w => w.in_stock).map(wine => {
-                const alert = getSommelierAlert(wine.data_acquisto, wine.tipologia, wine.last_check_date);
+                const alert = getSommelierAlert(wine.data_acquisto, wine.tipologia, wine.last_check_date, wine.anno_imbottigliamento);
                 return alert ? (
                   <div key={wine.id} className={`${alert.bg} ${alert.color} p-4 rounded-xl border border-current flex items-start justify-between gap-3 shadow-sm mb-3 animate-pulse`}>
                     <div className="flex items-start gap-3">
