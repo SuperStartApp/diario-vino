@@ -5,26 +5,28 @@ import { Wine, PlusCircle, History, LayoutDashboard, Search } from 'lucide-react
 import WineForm from './WineForm'; 
 import WineDetail from './WineDetail';
 import TastingForm from './TastingForm';
-import Auth from './Auth'; // Import della pagina di Login/Registrazione
+import Auth from './Auth';
 
 function App() {
   const [view, setView] = useState('dashboard'); 
   const [wines, setWines] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState(null); // Stato per l'utente loggato
+  const [session, setSession] = useState(null);
   const [selectedWine, setSelectedWine] = useState(null);
   const [isTasting, setIsTasting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
+  // --- NUOVI STATI PER RICERCA E FILTRI ---
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterType, setFilterType] = useState('Tutti');
+
   useEffect(() => {
-    // 1. Controllo sessione iniziale
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) fetchWines();
       else setLoading(false);
     });
 
-    // 2. Ascolto cambiamenti di stato (Login/Logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) fetchWines();
@@ -75,7 +77,6 @@ function App() {
     return acc;
   }, {});
 
-  // SE NON È LOGGATO, MOSTRA LA PAGINA DI LOGIN
   if (loading) return <div className="flex justify-center items-center h-screen text-gray-500 font-medium">Caricamento... 🍷</div>;
   if (!session) return <Auth />;
 
@@ -111,7 +112,7 @@ function App() {
               {wines.filter(w => w.in_stock).map(wine => {
                 const alert = getSommelierAlert(wine.data_acquisto, wine.tipologia, wine.last_check_date);
                 return alert ? (
-                  <div key={wine.id} className={`${alert.bg} ${alert.color} p-4 rounded-xl border border-current flex items-start justify-between gap-3 shadow-sm mb-3`}>
+                  <div key={wine.id} className={`${alert.bg} ${alert.color} p-4 rounded-xl border border-current flex items-start justify-between gap-3 shadow-sm mb-3 animate-pulse`}>
                     <div className="flex items-start gap-3">
                       <span className="text-2xl">{alert.icon}</span>
                       <div>
@@ -130,40 +131,88 @@ function App() {
           </div>
         )}
 
-        {/* VISTA INVENTARIO */}
-            {view === 'inventory' && !selectedWine && !isEditing && (
-              <div className="space-y-4 animate-in fade-in duration-500">
-                <h2 className="text-2xl font-bold text-gray-800">La mia Cantina</h2>
-                <div className="grid gap-3">
-                  {wines.filter(w => w.in_stock).map(wine => (
-                    <div 
-                      key={wine.id} 
-                      onClick={() => setSelectedWine(wine)}
-                      className="bg-white p-4 rounded-lg shadow flex justify-between items-center border-l-4 border-winelink-red cursor-pointer hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="space-y-1">
-                        <p className="font-bold text-lg leading-tight">{wine.nome_vino}</p>
-                        <p className="text-sm text-gray-600">
-                          <span className="font-medium">{wine.cantina}</span> • {wine.anno_imbottigliamento}
-                        </p>
-                        {/* NUOVA RIGA DI DETTAGLI RAPIDI */}
-                        <p className="text-[11px] text-gray-400 flex flex-wrap gap-x-2">
-                          <span>🍇 {wine.uvaggio || 'Uvaggio non specificato'}</span>
-                          <span>🍷 {wine.gradazione ? `${wine.gradazione}%` : 'Grad. N/D'}</span>
-                          <span>📅 Acq: {wine.data_acquisto || 'Data N/D'}</span>
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-xs bg-gray-200 px-2 py-1 rounded-full font-medium">{wine.tipologia}</span>
+        {/* VISTA INVENTARIO (AGGIORNATA CON RICERCA E FILTRI) */}
+        {view === 'inventory' && !selectedWine && !isEditing && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            <h2 className="text-2xl font-bold text-gray-800">La mia Cantina</h2>
+
+            {/* AREA FILTRI */}
+            <div className="flex flex-col md:flex-row gap-3 mb-6">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-3 text-gray-400" size={20} />
+                <input 
+                  type="text" 
+                  placeholder="Cerca per nome o cantina..." 
+                  className="w-full pl-10 p-3 bg-white border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-winelink-red outline-none transition-all"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              
+              <select 
+                className="p-3 bg-white border border-gray-200 rounded-2xl shadow-sm focus:ring-2 focus:ring-winelink-red outline-none transition-all cursor-pointer"
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+              >
+                <option value="Tutti">Tutte le Tipologie</option>
+                {Object.keys(statsMap).map(tipo => (
+                  <option key={tipo} value={tipo}>{tipo}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* LISTA VINI FILTRATA */}
+            <div className="grid gap-3">
+              {wines
+                .filter(w => w.in_stock)
+                .filter(w => 
+                  (w.nome_vino?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                   w.cantina?.toLowerCase().includes(searchTerm.toLowerCase())) &&
+                  (filterType === 'Tutti' || w.tipologia === filterType)
+                )
+                .map(wine => (
+                  <div 
+                    key={wine.id} 
+                    onClick={() => setSelectedWine(wine)}
+                    className="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center border-l-4 border-winelink-red cursor-pointer hover:shadow-md hover:bg-gray-50 transition-all group"
+                  >
+                    <div className="space-y-2">
+                      <p className="font-bold text-lg leading-tight group-hover:text-winelink-red transition-colors">
+                        {wine.nome_vino}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        <span className="font-semibold">{wine.cantina}</span> • {wine.anno_imbottigliamento}
+                      </p>
+                      
+                      {/* DETTAGLI MIGLIORATI: PILLOLE GRIGIE LEGGIBILI */}
+                      <div className="flex flex-wrap gap-y-1 gap-x-3 text-xs text-gray-500 mt-2">
+                        <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md border border-gray-200">
+                          🍇 {wine.uvaggio || 'N/D'}
+                        </span>
+                        <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md border border-gray-200">
+                          🍷 {wine.gradazione ? `${wine.gradazione}%` : 'Grad. N/D'}
+                        </span>
+                        <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md border border-gray-200">
+                          📅 Acq: {wine.data_acquisto || 'N/D'}
+                        </span>
                       </div>
                     </div>
-                  ))}
-                  {wines.filter(w => w.in_stock).length === 0 && (
-                    <p className="text-center text-gray-500 py-10">La cantina è vuota. Aggiungi un vino!</p>
-                  )}
+                    <div className="text-right">
+                      <span className="text-xs bg-winelink-red/10 text-winelink-red px-3 py-1 rounded-full font-bold">
+                        {wine.tipologia}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              
+              {wines.filter(w => w.in_stock && (w.nome_vino?.toLowerCase().includes(searchTerm.toLowerCase()) || w.cantina?.toLowerCase().includes(searchTerm.toLowerCase())) && (filterType === 'Tutti' || w.tipologia === filterType)).length === 0 && (
+                <div className="text-center py-10 text-gray-400">
+                  <p>Nessun vino trovato con questi filtri... 🍷</p>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          </div>
+        )}
 
         {/* VISTA DETTAGLIO VINO */}
         {selectedWine && !isEditing && (
