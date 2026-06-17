@@ -7,6 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
 dist
 dist-ssr
@@ -22,3 +23,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Capacitor / Native Mobile
+# Ignoriamo le cartelle native perché vengono generate dal codice web.
+# Se un giorno dovessi fare modifiche pesanti al codice Java/Kotlin, 
+# potrai decidere di includerle, ma per ora è meglio tenerle fuori da Git.
+/android
+/ios

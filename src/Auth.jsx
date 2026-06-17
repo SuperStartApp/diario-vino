@@ -1,34 +1,33 @@
 import React, { useState } from 'react';
 import { supabase } from './supabaseClient';
-import { Wine, Mail, Lock, User, ArrowRight } from 'lucide-react';
+import { Wine, LogIn } from 'lucide-react';
 
 function Auth() {
   const [loading, setLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [userName, setUserName] = useState('');
 
-  async function handleAuth(e) {
+  // ✅ FUNZIONE LOGIN GOOGLE
+  async function signInWithGoogle() {
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin // Torna all'app dopo il login
+      }
+    });
+    if (error) {
+      alert('Errore Google Login: ' + error.message);
+      setLoading(false);
+    }
+  }
+
+  // LOGIN TRADIZIONALE (per chi ha già l'account)
+  async function handleLogin(e) {
     e.preventDefault();
     setLoading(true);
-
-    if (isSignUp) {
-      // REGISTRAZIONE
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { display_name: userName } // Salviamo il nome nei metadati dell'utente
-        }
-      });
-      if (error) alert(error.message);
-      else alert('Account creato! Benvenuto in WineLink 🍷');
-    } else {
-      // LOGIN
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) alert(error.message);
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) alert(error.message);
     setLoading(false);
   }
 
@@ -40,55 +39,45 @@ function Auth() {
             <Wine className="text-white" size={32} />
           </div>
           <h1 className="text-3xl font-bold text-gray-800">WineLink</h1>
-          <p className="text-gray-500">{isSignUp ? 'Crea il tuo diario dei vini' : 'Bentornato, Sommelier!'}</p>
+          <p className="text-gray-500 mt-2">Il tuo sommelier personale in tasca</p>
         </div>
 
-        <form onSubmit={handleAuth} className="space-y-4">
-          {isSignUp && (
-            <div className="relative">
-              <User className="absolute left-3 top-3 text-gray-400" size={20} />
-              <input 
-                type="text" placeholder="Nome completo" required
-                className="w-full pl-10 p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-winelink-red"
-                value={userName} onChange={e => setUserName(e.target.value)}
-              />
-            </div>
-          )}
+        <div className="space-y-4">
+          {/* TASTO GOOGLE - Protagonista */}
+          <button 
+            onClick={signInWithGoogle}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 p-4 border border-gray-300 rounded-xl font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm active:scale-95 disabled:bg-gray-100"
+          >
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+            Continua con Google
+          </button>
 
-          <div className="relative">
-            <Mail className="absolute left-3 top-3 text-gray-400" size={20} />
+          <div className="relative flex items-center py-4">
+            <div className="flex-grow border-t border-gray-200"></div>
+            <span className="flex-shrink mx-4 text-gray-400 text-xs uppercase font-bold">Oppure</span>
+            <div className="flex-grow border-t border-gray-200"></div>
+          </div>
+
+          {/* LOGIN MANUALE */}
+          <form onSubmit={handleLogin} className="space-y-4">
             <input 
               type="email" placeholder="Email" required
-              className="w-full pl-10 p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-winelink-red"
+              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-winelink-red"
               value={email} onChange={e => setEmail(e.target.value)}
             />
-          </div>
-
-          <div className="relative">
-            <Lock className="absolute left-3 top-3 text-gray-400" size={20} />
             <input 
               type="password" placeholder="Password" required
-              className="w-full pl-10 p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-winelink-red"
+              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-winelink-red"
               value={password} onChange={e => setPassword(e.target.value)}
             />
-          </div>
-
-          <button 
-            disabled={loading}
-            className="w-full bg-winelink-red text-white p-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-800 transition-all shadow-lg disabled:bg-gray-400"
-          >
-            {loading ? 'Caricamento...' : (isSignUp ? 'Crea Account' : 'Accedi')} 
-            <ArrowRight size={20} />
-          </button>
-        </form>
-
-        <div className="text-center mt-6">
-          <button 
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="text-sm text-gray-500 hover:text-winelink-red transition-colors font-medium"
-          >
-            {isSignUp ? 'Hai già un account? Accedi' : 'Nuovo qui? Crea un account gratuito'}
-          </button>
+            <button 
+              disabled={loading}
+              className="w-full bg-winelink-red text-white p-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-800 transition-all shadow-lg disabled:bg-gray-400"
+            >
+              {loading ? 'Accesso...' : <><LogIn size={20}/> Accedi</>}
+            </button>
+          </form>
         </div>
       </div>
     </div>

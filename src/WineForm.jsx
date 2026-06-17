@@ -7,7 +7,7 @@ const REGIONI = ['Piemonte', 'Valle d\'Aosta', 'Lombardia', 'Trentino-Alto Adige
 
 const DRAFT_KEY = 'winelink_wine_draft';
 
-function WineForm({ existingWine, onSave, onCancel }) {
+function WineForm({ existingWine, onSave, onCancel, isPremium, winesCount }) {
   const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState(() => {
@@ -20,7 +20,7 @@ function WineForm({ existingWine, onSave, onCancel }) {
       nome_vino: '', cantina: '', uvaggio: '', tipologia: 'Rossi', denominazione: '',
       anno_imbottigliamento: '', regione: 'Toscana', gradazione: '', prezzo_acquisto: '',
       data_acquisto: new Date().toISOString().split('T')[0], posizione: '', note_generali: '', in_stock: true,
-      quantita: 1 // Default 1 bottiglia
+      quantita: 1
     };
   });
 
@@ -35,14 +35,19 @@ function WineForm({ existingWine, onSave, onCancel }) {
   const cleanData = (data) => {
     const cleaned = { ...data };
     const numericFields = ['anno_imbottigliamento', 'gradazione', 'prezzo_acquisto', 'quantita'];
-    numericFields.forEach(field => {
-      if (cleaned[field] === '') cleaned[field] = null;
-    });
+    numericFields.forEach(field => { if (cleaned[field] === '') cleaned[field] = null; });
     return cleaned;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // ✅ BLOCCO 25 VINI: Se non è premium, ha già 25 vini e sta aggiungendo un nuovo vino
+    if (!isPremium && winesCount >= 25 && !existingWine) {
+      alert("Hai raggiunto il limite di 25 bottiglie per l'account gratuito. Passa a Premium per sbloccare la tua cantina! 🍷");
+      return;
+    }
+
     setLoading(true);
     try {
       const dataToSave = cleanData(formData);
@@ -90,15 +95,10 @@ function WineForm({ existingWine, onSave, onCancel }) {
         <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Data Acquisto</label><input type="date" name="data_acquisto" value={formData.data_acquisto} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
         <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Gradazione</label><input type="number" step="0.1" name="gradazione" value={formData.gradazione} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
         <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Prezzo</label><input type="number" step="0.01" name="prezzo_acquisto" value={formData.prezzo_acquisto} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
-        
-        {/* NUOVO CAMPO QUANTITÀ */}
         <div className="space-y-1">
-          <label className="text-xs font-bold text-gray-500 uppercase ml-1 flex items-center gap-1">
-            <Package size={12}/> Quantità Bottiglie
-          </label>
+          <label className="text-xs font-bold text-gray-500 uppercase ml-1 flex items-center gap-1"><Package size={12}/> Quantità</label>
           <input type="number" name="quantita" value={formData.quantita} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" min="1" />
         </div>
-
         <div className="space-y-1 md:col-span-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Posizione</label><input name="posizione" value={formData.posizione} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
         <div className="space-y-1 md:col-span-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Note</label><textarea name="note_generali" value={formData.note_generali} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none h-24" /></div>
         <div className="md:col-span-2 mt-4">
