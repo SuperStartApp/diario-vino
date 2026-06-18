@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { getSommelierAlert } from './utils/sommelier';
-// AGGIUNTO ArrowLeft e ArrowRight QUI SOTTO 👇
+import { App as CapacitorApp } from '@capacitor/app'; 
 import { Wine, PlusCircle, History, LayoutDashboard, Search, Star, Calendar, CheckCircle2, ArrowLeft, ArrowRight } from 'lucide-react';
 import WineForm from './WineForm'; 
 import WineDetail from './WineDetail';
@@ -12,13 +12,12 @@ import Profile from './Profile';
 function App() {
   const [view, setView] = useState('dashboard'); 
   const [wines, setWines] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); 
   const [session, setSession] = useState(null);
   const [selectedWine, setSelectedWine] = useState(null);
   const [isTasting, setIsTasting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  // STATI PER RICERCA, FILTRI E VISTA DEGUSTAZIONE
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('Tutti');
   const [isPremium, setIsPremium] = useState(false);
@@ -26,13 +25,39 @@ function App() {
   const [tastingData, setTastingData] = useState(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) {
-        fetchWines();
-        fetchProfile(session.user.id);
-      } else setLoading(false);
-    });
+    const setupDeepLinks = async () => {
+      await CapacitorApp.addListener('appUrlOpen', async (event) => {
+        const url = event.url;
+        if (url && url.includes('access_token')) {
+          const hash = url.split('#')[1];
+          if (hash) {
+            const params = new URLSearchParams(hash);
+            const accessToken = params.get('access_token');
+            const refreshToken = params.get('refresh_token');
+            if (accessToken && refreshToken) {
+              await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+            }
+          }
+        }
+      });
+    };
+
+    async function initializeAuth() {
+      try {
+        await setupDeepLinks();
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        setSession(currentSession);
+        if (currentSession) {
+          await Promise.all([fetchWines(), fetchProfile(currentSession.user.id)]);
+        }
+      } catch (error) {
+        console.error("Errore inizializzazione:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    initializeAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
@@ -41,7 +66,6 @@ function App() {
         fetchProfile(session.user.id);
       } else {
         setWines([]);
-        setLoading(false);
       }
     });
 
@@ -54,36 +78,38 @@ function App() {
   }
 
   async function fetchWines() {
-    setLoading(true);
     const { data, error } = await supabase
       .from('diar_wines')
       .select('*')
       .order('created_at', { ascending: false });
     if (error) console.error('Errore fetch:', error);
     else setWines(data || []);
-    setLoading(false);
   }
 
-  // FUNZIONE PER RECUPERARE I DETTAGLI DELLA DEGUSTAZIONE
   async function openTastingExperience(wine) {
     setLoading(true);
     setSelectedWine(wine);
-    const { data, error } = await supabase
-      .from('diar_tastings')
-      .select('*')
-      .eq('wine_id', wine.id)
-      .order('data_degustazione', { ascending: false })
-      .limit(1)
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('diar_tastings')
+        .select('*')
+        .eq('wine_id', wine.id)
+        .order('data_degustazione', { ascending: false })
+        .limit(1);
 
-    if (error) {
-      console.log("Nessuna degustazione trovata per questo vino.");
+      if (error) {
+        setTastingData(null);
+      } else if (data && data.length > 0) {
+        setTastingData(data[0]);
+      } else {
+        setTastingData(null);
+      }
+    } catch (err) {
       setTastingData(null);
-    } else {
-      setTastingData(data);
+    } finally {
+      setIsViewingTasting(true);
+      setLoading(false);
     }
-    setIsViewingTasting(true);
-    setLoading(false);
   }
 
   async function handleSnooze(wineId) {
@@ -109,7 +135,15 @@ function App() {
     return acc;
   }, {});
 
-  if (loading) return <div className="flex justify-center items-center h-screen text-gray-500 font-medium">Caricamento... 🍷</div>;
+  if (loading) {
+    return (
+      <div className="flex flex-col justify-center items-center h-screen bg-gray-50 text-gray-500 font-medium gap-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-winelink-red"></div>
+        <p>Sintonizzando la cantina... 🍷</p>
+      </div>
+    );
+  }
+
   if (!session) return <Auth />;
 
   return (
@@ -122,8 +156,7 @@ function App() {
       </header>
 
       <main className="p-4 max-w-4xl mx-auto">
-        {/* VISTA DASHBOARD */}
-        {view === 'dashboard' && !selectedWine && !isEditing && (
+        {view === 'dashboard' && !selectedWine && !isEditing && !isTasting && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <StatCard label="Totale" value={wines.reduce((s, w) => s + (w.quantita || 1), 0)} color="bg-white" />
@@ -136,6 +169,9 @@ function App() {
             <div className="space-y-3">
               <h2 className="text-xl font-semibold text-gray-700 flex items-center gap-2">Consigli del Sommelier</h2>
               {wines.filter(w => w.in_stock).map(wine => {
+                // ✅ FIX DATA: Se manca la data di acquisto, non mostrare l'alert
+                if (!wine.data_acquisto) return null; 
+                
                 const alert = getSommelierAlert(wine.data_acquisto, wine.tipologia, wine.last_check_date, wine.anno_imbottigliamento);
                 return alert ? (
                   <div key={wine.id} className={`${alert.bg} ${alert.color} p-4 rounded-xl border border-current flex items-start justify-between gap-3 shadow-sm mb-3 animate-pulse`}>
@@ -147,15 +183,14 @@ function App() {
                   </div>
                 ) : null;
               })}
-              {wines.filter(w => w.in_stock && getSommelierAlert(w.data_acquisto, w.tipologia, w.last_check_date, w.anno_imbottigliamento)).length === 0 && (
+              {wines.filter(w => w.in_stock && wine.data_acquisto && getSommelierAlert(w.data_acquisto, w.tipologia, w.last_check_date, w.anno_imbottigliamento)).length === 0 && (
                 <p className="text-gray-500 italic text-center py-4">Tutto in ordine in cantina! 🥂</p>
               )}
             </div>
           </div>
         )}
 
-        {/* VISTA INVENTARIO */}
-        {view === 'inventory' && !selectedWine && !isEditing && (
+        {view === 'inventory' && !selectedWine && !isEditing && !isTasting && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <h2 className="text-2xl font-bold text-gray-800">La mia Cantina</h2>
             <div className="flex flex-col md:flex-row gap-3 mb-6">
@@ -190,22 +225,29 @@ function App() {
           </div>
         )}
 
-        {/* VISTA DETTAGLIO VINO (STOCK) */}
-        {selectedWine && !isEditing && !isViewingTasting && (
+        {selectedWine && !isEditing && !isViewingTasting && !isTasting && (
           <WineDetail wine={selectedWine} onBack={() => setSelectedWine(null)} onTast={() => setIsTasting(true)} onEdit={() => setIsEditing(true)} onSnooze={() => handleSnooze(selectedWine.id)} />
         )}
 
-        {/* VISTA ESPERIENZA DEGUSTAZIONE (ARCHIVIO) */}
+        {/* ✅ FIX TASTO DEGUSTA ORA: Ora il componente TastingForm viene renderizzato correttamente */}
+        {isTasting && selectedWine && (
+          <div className="animate-in zoom-in duration-300">
+             <TastingForm 
+                wine={selectedWine} 
+                onSave={() => { setIsTasting(false); fetchWines(); }} 
+                onCancel={() => setIsTasting(false)} 
+             />
+          </div>
+        )}
+
         {isViewingTasting && selectedWine && (
           <div className="animate-in zoom-in duration-300 space-y-6">
             <button onClick={() => setIsViewingTasting(false)} className="flex items-center gap-2 text-winelink-red font-medium"><ArrowLeft size={20}/> Torna alla lista</button>
-            
             <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
               <div className="p-6 bg-gray-800 text-white">
                 <h2 className="text-2xl font-bold">{selectedWine.nome_vino}</h2>
                 <p className="opacity-80">{selectedWine.cantina} • Degustazione del {tastingData?.data_degustazione || 'Data N/D'}</p>
               </div>
-
               <div className="p-6 space-y-6">
                 {tastingData ? (
                   <>
@@ -213,7 +255,6 @@ function App() {
                       <Star className="fill-winelink-yellow" size={24} />
                       <span className="text-2xl font-black">{tastingData.voto_stelle} / 5</span>
                     </div>
-
                     <div className="space-y-4">
                       <ExperienceSection icon={<Wine size={18}/>} label="Prime Impressioni" text={tastingData.impressioni_rapide} />
                       <ExperienceSection icon={<CheckCircle2 size={18}/>} label="Analisi Visiva" text={tastingData.fis_visivo} />
@@ -231,25 +272,21 @@ function App() {
           </div>
         )}
 
-        {/* VISTA MODIFICA VINO */}
         {isEditing && (
           <div className="max-w-2xl mx-auto">
             <WineForm existingWine={selectedWine} isPremium={isPremium} winesCount={wines.length} onSave={() => { setIsEditing(false); fetchWines(); }} onCancel={() => { setIsEditing(false); setSelectedWine(null); }} />
           </div>
         )}
 
-        {/* VISTA AGGIUNGI VINO */}
-        {view === 'add' && !isEditing && (
+        {view === 'add' && !isEditing && !isTasting && (
           <div className="max-w-2xl mx-auto">
             <WineForm isPremium={isPremium} winesCount={wines.length} onSave={() => { fetchWines(); setView('dashboard'); }} onCancel={() => setView('dashboard')} />
           </div>
         )}
 
-        {/* VISTA STORICO (BEVUTI) - AGGIORNATA CON RICERCA E DESIGN PREMIUM */}
         {view === 'history' && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <h2 className="text-2xl font-bold text-gray-800">Vini Degustati</h2>
-            
             <div className="flex flex-col md:flex-row gap-3 mb-6">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-3 text-gray-400" size={20} />
@@ -260,7 +297,6 @@ function App() {
                 {Object.keys(statsMap).map(tipo => (<option key={tipo} value={tipo}>{tipo}</option>))}
               </select>
             </div>
-
             <div className="grid gap-3">
               {wines
                 .filter(w => !w.in_stock)
@@ -299,41 +335,29 @@ function App() {
           </div>
         )}
 
-        {/* VISTA PROFILO */}
         {view === 'profile' && (
           <Profile user={session.user} isPremium={isPremium} onLogout={handleLogout} />
         )}
       </main>
 
-      {/* MODALE DEGUSTAZIONE (INPUT) */}
-      {isTasting && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto">
-          <TastingForm wine={selectedWine} onCancel={() => setIsTasting(false)} onComplete={() => { setIsTasting(false); setSelectedWine(null); fetchWines(); setView('history'); }} />
-        </div>
-      )}
-
-      {/* NAVIGAZIONE */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around p-3 shadow-2xl z-50">
-        <NavButton active={view === 'dashboard' && !selectedWine && !isEditing} onClick={() => {setView('dashboard'); setSelectedWine(null); setIsEditing(false);}} icon={<LayoutDashboard />} label="Home" />
-        <NavButton active={view === 'inventory' && !selectedWine && !isEditing} onClick={() => {setView('inventory'); setSelectedWine(null); setIsEditing(false);}} icon={<Search />} label="Cantina" />
-        <NavButton active={view === 'add' && !isEditing} onClick={() => {setView('add'); setSelectedWine(null); setIsEditing(false);}} icon={<PlusCircle />} label="Aggiungi" />
-        <NavButton active={view === 'history' && !selectedWine && !isEditing} onClick={() => {setView('history'); setSelectedWine(null); setIsEditing(false);}} icon={<History />} label="Bevuti" />
+        <NavButton active={view === 'dashboard' && !selectedWine && !isEditing && !isTasting} onClick={() => {setView('dashboard'); setSelectedWine(null); setIsEditing(false); setIsTasting(false);}} icon={<LayoutDashboard />} label="Home" />
+        <NavButton active={view === 'inventory' && !selectedWine && !isEditing && !isTasting} onClick={() => {setView('inventory'); setSelectedWine(null); setIsEditing(false); setIsTasting(false);}} icon={<Search />} label="Cantina" />
+        <NavButton active={view === 'add' && !isEditing && !isTasting} onClick={() => {setView('add'); setSelectedWine(null); setIsEditing(false); setIsTasting(false);}} icon={<PlusCircle />} label="Aggiungi" />
+        <NavButton active={view === 'history' && !selectedWine && !isEditing && !isTasting} onClick={() => {setView('history'); setSelectedWine(null); setIsEditing(false); setIsTasting(false);}} icon={<History />} label="Bevuti" />
       </nav>
     </div>
   );
 }
 
-// --- COMPONENTI HELPER ---
-
 function StatCard({ label, value, color }) {
-  return <div className={`${color} p-4 rounded-2xl shadow-sm border border-gray-100 text-center transition-transform hover:scale-105`}><p className="text-[10px] uppercase font-bold text-gray-500">{label}</p><p className="text-2xl font-black">{value}</p></div>;
+  return <div className={`${color} p-4 rounded-2xl shadow-sm border border-gray-100 text-center transition-transform hover:scale-100`}><p className="text-[10px] uppercase font-bold text-gray-500">{label}</p><p className="text-2xl font-black">{value}</p></div>;
 }
 
 function NavButton({ active, onClick, icon, label }) {
   return <button onClick={onClick} className={`flex flex-col items-center gap-1 transition-colors ${active ? 'text-winelink-red' : 'text-gray-400'}`}>{icon}<span className="text-[10px] font-medium">{label}</span></button>;
 }
 
-// NUOVO COMPONENTE: VISTA ESPERIENZA (PER I BEVUTI)
 function ExperienceSection({ icon, label, text }) {
   return (
     <div className="space-y-1">

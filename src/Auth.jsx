@@ -7,13 +7,14 @@ function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // ✅ FUNZIONE LOGIN GOOGLE
+  // ✅ FUNZIONE LOGIN GOOGLE - VERSIONE PROFESSIONALE
   async function signInWithGoogle() {
     setLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin // Torna all'app dopo il login
+        // Sostituiamo window.location.origin con il tuo Deep Link
+        redirectTo: 'com.winelink.app://login-callback' 
       }
     });
     if (error) {

@@ -38,7 +38,7 @@ function Profile({ user, isPremium, onLogout }) {
           </div>
           <p className="text-sm opacity-90">Sblocca la tua cantina e inserisci tutte le bottiglie che desideri senza limiti!</p>
           <button className="w-full bg-white text-winelink-red p-3 rounded-xl font-bold hover:bg-gray-100 transition-all shadow-md active:scale-95">
-            Abbonamento Annuale € 9,90
+            Abbonamento Annuale € 7,90
           </button>
         </div>
       )}
