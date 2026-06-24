@@ -7,18 +7,23 @@ function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // ✅ FUNZIONE LOGIN GOOGLE - VERSIONE PROFESSIONALE
+  // ✅ FUNZIONE LOGIN GOOGLE - AGGIORNATA AL NUOVO PACKAGE NAME
   async function signInWithGoogle() {
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        // Sostituiamo window.location.origin con il tuo Deep Link
-        redirectTo: 'com.winelink.app://login-callback' 
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          // INDIRIZZO CORRETTO: Ora punta a .official
+          redirectTo: 'com.winelink.official://login-callback' 
+        }
+      });
+      if (error) {
+        alert('Errore Google Login: ' + error.message);
+        setLoading(false);
       }
-    });
-    if (error) {
-      alert('Errore Google Login: ' + error.message);
+    } catch (err) {
+      alert('Errore imprevisto: ' + err.message);
       setLoading(false);
     }
   }
@@ -51,7 +56,7 @@ function Auth() {
             className="w-full flex items-center justify-center gap-3 p-4 border border-gray-300 rounded-xl font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm active:scale-95 disabled:bg-gray-100"
           >
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-            Continua con Google
+            {loading ? 'Connessione...' : 'Continua con Google'}
           </button>
 
           <div className="relative flex items-center py-4">

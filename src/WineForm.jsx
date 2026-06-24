@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { Save, X, Wine, MapPin, Calendar, DollarSign, Percent, Package } from 'lucide-react';
+import { 
+  Save, X, Wine, MapPin, Calendar, DollarSign, Percent, Package, Info, Heart 
+} from 'lucide-react';
 
 const TIPOLOGIE = ['Rossi', 'Bianchi', 'Rosati', 'Bollicine', 'Champagne', 'Passito/Dolce', 'Macerato'];
 const REGIONI = ['Piemonte', 'Valle d\'Aosta', 'Lombardia', 'Trentino-Alto Adige', 'Veneto', 'Friuli Venezia Giulia', 'Liguria', 'Emilia-Romagna', 'Toscana', 'Umbria', 'Marche', 'Lazio', 'Abruzzo', 'Molise', 'Campania', 'Puglia', 'Basilicata', 'Calabria', 'Sardegna', 'Sicilia', 'Estero'];
 
 const DRAFT_KEY = 'winelink_wine_draft';
 
-function WineForm({ existingWine, onSave, onCancel, isPremium, winesCount }) {
+// Aggiunto onLimitReached tra le proprietà (props)
+function WineForm({ existingWine, onSave, onCancel, isPremium, winesCount, onLimitReached }) {
   const [loading, setLoading] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
   const [formData, setFormData] = useState(() => {
     if (existingWine) return existingWine;
@@ -35,16 +39,16 @@ function WineForm({ existingWine, onSave, onCancel, isPremium, winesCount }) {
   const cleanData = (data) => {
     const cleaned = { ...data };
     const numericFields = ['anno_imbottigliamento', 'gradazione', 'prezzo_acquisto', 'quantita'];
-    numericFields.forEach(field => { if (cleaned[field] === '') cleaned[field] = null; });
+    numericFields.forEach(field => { if (cleaned[field] === '' || cleaned[field] === undefined) cleaned[field] = null; });
     return cleaned;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // ✅ BLOCCO 25 VINI: Se non è premium, ha già 25 vini e sta aggiungendo un nuovo vino
+    // ✅ BLOCCO 25 VINI
     if (!isPremium && winesCount >= 25 && !existingWine) {
-      alert("Hai raggiunto il limite di 25 bottiglie per l'account gratuito. Passa a Premium per sbloccare la tua cantina! 🍷");
+      setShowLimitModal(true); 
       return;
     }
 
@@ -57,7 +61,11 @@ function WineForm({ existingWine, onSave, onCancel, isPremium, winesCount }) {
       } else {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("Utente non autenticato");
-        const { error } = await supabase.from('diar_wines').insert([{ ...dataToSave, user_id: user.id }]);
+        const { error } = await supabase.from('diar_wines').insert([{ 
+          ...dataToSave, 
+          user_id: user.id,
+          is_practice_wine: false 
+        }]);
         if (error) throw error;
         localStorage.removeItem(DRAFT_KEY);
       }
@@ -68,46 +76,89 @@ function WineForm({ existingWine, onSave, onCancel, isPremium, winesCount }) {
   };
 
   return (
-    <div className="bg-white p-6 rounded-3xl shadow-2xl border border-gray-100 animate-in zoom-in duration-300">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-winelink-red flex items-center gap-2"><Wine /> {existingWine ? 'Modifica Bottiglia' : 'Nuova Bottiglia'}</h2>
-        <button onClick={onCancel} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X /></button>
+    <div className="relative">
+      <div className="bg-white p-6 rounded-3xl shadow-2xl border border-gray-100 animate-in zoom-in duration-300">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-winelink-red flex items-center gap-2"><Wine /> {existingWine ? 'Modifica Bottiglia' : 'Nuova Bottiglia'}</h2>
+          <button onClick={onCancel} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-2 space-y-1">
+            <label className="text-xs font-bold text-gray-500 uppercase ml-1">Nome del Vino</label>
+            <input required name="nome_vino" value={formData.nome_vino} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" />
+          </div>
+          <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Cantina</label><input name="cantina" value={formData.cantina} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
+          <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Uvaggio</label><input name="uvaggio" value={formData.uvaggio} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
+          <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Tipologia</label>
+            <select name="tipologia" value={formData.tipologia} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none">
+              {TIPOLOGIE.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Denominazione</label><input name="denominazione" value={formData.denominazione} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
+          <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Regione</label>
+            <select name="regione" value={formData.regione} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none">
+              {REGIONI.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Anno Imbott.</label><input type="number" name="anno_imbottigliamento" value={formData.anno_imbottigliamento} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
+          <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Data Acquisto</label><input type="date" name="data_acquisto" value={formData.data_acquisto} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
+          <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Gradazione</label><input type="number" step="0.1" name="gradazione" value={formData.gradazione} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
+          <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Prezzo</label><input type="number" step="0.01" name="prezzo_acquisto" value={formData.prezzo_acquisto} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-gray-500 uppercase ml-1 flex items-center gap-1"><Package size={12}/> Quantità</label>
+            <input type="number" name="quantita" value={formData.quantita} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" min="1" />
+          </div>
+          <div className="space-y-1 md:col-span-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Posizione</label><input name="posizione" value={formData.posizione} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
+          <div className="space-y-1 md:col-span-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Note</label><textarea name="note_generali" value={formData.note_generali} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none h-24" /></div>
+          <div className="md:col-span-2 mt-4">
+            <button disabled={loading} className="w-full bg-winelink-red text-white p-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-800 transition-all shadow-lg disabled:bg-gray-400">
+              <Save size={20}/> {loading ? 'Salvataggio...' : 'Salva Bottiglia'}
+            </button>
+          </div>
+        </form>
       </div>
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="md:col-span-2 space-y-1">
-          <label className="text-xs font-bold text-gray-500 uppercase ml-1">Nome del Vino</label>
-          <input required name="nome_vino" value={formData.nome_vino} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" />
+
+      {/* 🌟 MODAL POPUP 🌟 */}
+      {showLimitModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl text-center animate-in zoom-in duration-300 border border-gray-100">
+            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Wine className="text-winelink-red" size={40} />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-3">Cantina Piena! 🍷</h3>
+            <p className="text-gray-600 text-sm leading-relaxed mb-6">
+              Hai raggiunto il limite di <b>25 bottiglie</b> per l'account gratuito. 
+              <br /><br />
+              <span className="text-xs text-gray-500 italic">
+                WineLink è un progetto indipendente. Se hai bisogno di uno sblocco gratuito o vuoi sostenere il progetto, trovi tutte le info nel tuo Profilo.
+              </span>
+            </p>
+            <div className="space-y-3">
+              <button 
+                onClick={() => {
+                  setShowLimitModal(false);
+                  onLimitReached(); // 👈 Ora chiama la funzione che la App ci passa
+                }}
+                className="w-full bg-winelink-red text-white py-4 rounded-2xl font-bold hover:bg-red-800 transition-all shadow-lg flex items-center justify-center gap-2"
+              >
+                <Info size={18} /> Vai al Profilo
+              </button>
+              <button 
+                onClick={() => setShowLimitModal(false)}
+                className="w-full bg-gray-100 text-gray-500 py-4 rounded-2xl font-semibold hover:bg-gray-200 transition-all"
+              >
+                Annulla
+              </button>
+            </div>
+            <div className="mt-6 flex items-center justify-center gap-1 text-red-400 text-xs font-medium">
+              <Heart size={14} fill="currentColor" />
+              <span>Grazie per il supporto!</span>
+            </div>
+          </div>
         </div>
-        <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Cantina</label><input name="cantina" value={formData.cantina} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
-        <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Uvaggio</label><input name="uvaggio" value={formData.uvaggio} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
-        <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Tipologia</label>
-          <select name="tipologia" value={formData.tipologia} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none">
-            {TIPOLOGIE.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Denominazione</label><input name="denominazione" value={formData.denominazione} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
-        <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Regione</label>
-          <select name="regione" value={formData.regione} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none">
-            {REGIONI.map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </div>
-        <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Anno Imbott.</label><input type="number" name="anno_imbottigliamento" value={formData.anno_imbottigliamento} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
-        <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Data Acquisto</label><input type="date" name="data_acquisto" value={formData.data_acquisto} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
-        <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Gradazione</label><input type="number" step="0.1" name="gradazione" value={formData.gradazione} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
-        <div className="space-y-1"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Prezzo</label><input type="number" step="0.01" name="prezzo_acquisto" value={formData.prezzo_acquisto} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
-        <div className="space-y-1">
-          <label className="text-xs font-bold text-gray-500 uppercase ml-1 flex items-center gap-1"><Package size={12}/> Quantità</label>
-          <input type="number" name="quantita" value={formData.quantita} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" min="1" />
-        </div>
-        <div className="space-y-1 md:col-span-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Posizione</label><input name="posizione" value={formData.posizione} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none" /></div>
-        <div className="space-y-1 md:col-span-2"><label className="text-xs font-bold text-gray-500 uppercase ml-1">Note</label><textarea name="note_generali" value={formData.note_generali} onChange={handleChange} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-winelink-red outline-none h-24" /></div>
-        <div className="md:col-span-2 mt-4">
-          <button disabled={loading} className="w-full bg-winelink-red text-white p-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-800 transition-all shadow-lg disabled:bg-gray-400">
-            <Save size={20}/> {loading ? 'Salvataggio...' : 'Salva Bottiglia'}
-          </button>
-        </div>
-      </form>
+      )}
     </div>
   );
 }
+
 export default WineForm;

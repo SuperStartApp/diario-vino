@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { getSommelierAlert } from './utils/sommelier';
+import { getSommelierAlert, getSommelierSuggestion } from './utils/sommelier';
 import { App as CapacitorApp } from '@capacitor/app'; 
-import { Wine, PlusCircle, History, LayoutDashboard, Search, Star, Calendar, CheckCircle2, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Wine, PlusCircle, History, LayoutDashboard, Search, Star, Calendar, CheckCircle2, ArrowLeft, ArrowRight, X, Sparkles } from 'lucide-react';
 import WineForm from './WineForm'; 
 import WineDetail from './WineDetail';
 import TastingForm from './TastingForm';
@@ -23,6 +23,32 @@ function App() {
   const [isPremium, setIsPremium] = useState(false);
   const [isViewingTasting, setIsViewingTasting] = useState(false);
   const [tastingData, setTastingData] = useState(null);
+
+  const [suggestion, setSuggestion] = useState(null);
+  const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
+
+  async function fetchProfile(userId) {
+    if (!userId) return;
+    try {
+      const { data } = await supabase.from('diar_profiles').select('is_premium').eq('id', userId).single();
+      if (data) setIsPremium(data.is_premium);
+    } catch (e) {
+      console.error("Errore profilo:", e);
+    }
+  }
+
+  async function fetchWines() {
+    try {
+      const { data, error } = await supabase
+        .from('diary_only_wines') 
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setWines(data || []);
+    } catch (error) {
+      console.error('Errore fetch vini:', error);
+    }
+  }
 
   useEffect(() => {
     const setupDeepLinks = async () => {
@@ -47,7 +73,7 @@ function App() {
         await setupDeepLinks();
         const { data: { session: currentSession } } = await supabase.auth.getSession();
         setSession(currentSession);
-        if (currentSession) {
+        if (currentSession?.user) {
           await Promise.all([fetchWines(), fetchProfile(currentSession.user.id)]);
         }
       } catch (error) {
@@ -61,7 +87,7 @@ function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session) {
+      if (session?.user) {
         fetchWines();
         fetchProfile(session.user.id);
       } else {
@@ -72,21 +98,8 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function fetchProfile(userId) {
-    const { data } = await supabase.from('diar_profiles').select('is_premium').eq('id', userId).single();
-    if (data) setIsPremium(data.is_premium);
-  }
-
-  async function fetchWines() {
-    const { data, error } = await supabase
-      .from('diar_wines')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) console.error('Errore fetch:', error);
-    else setWines(data || []);
-  }
-
   async function openTastingExperience(wine) {
+    if (!wine) return;
     setLoading(true);
     setSelectedWine(wine);
     try {
@@ -96,15 +109,9 @@ function App() {
         .eq('wine_id', wine.id)
         .order('data_degustazione', { ascending: false })
         .limit(1);
-
-      if (error) {
-        setTastingData(null);
-      } else if (data && data.length > 0) {
-        setTastingData(data[0]);
-      } else {
-        setTastingData(null);
-      }
-    } catch (err) {
+      if (error) setTastingData(null);
+      else setTastingData(data && data.length > 0 ? data[0] : null);
+    } catch (e) {
       setTastingData(null);
     } finally {
       setIsViewingTasting(true);
@@ -128,10 +135,24 @@ function App() {
     setWines([]);
   }
 
-  const statsMap = wines.reduce((acc, wine) => {
+  const askSommelier = () => {
+    const suggestion = getSommelierSuggestion(inStockWines);
+    if (suggestion) {
+      setSuggestion(suggestion);
+      setIsSuggestionModalOpen(true);
+    } else {
+      alert("La tua cantina è vuota! Inserisci qualche vino per consultare il Sommelier. 🍷");
+    }
+  };
+
+  // --- CALCOLI ---
+  const inStockWines = wines.filter(w => w.in_stock);
+  const totalBottlesHistory = wines.reduce((acc, wine) => acc + Number(wine.quantita || 1), 0);
+  const inStockBottlesCount = inStockWines.reduce((acc, wine) => acc + Number(wine.quantita || 1), 0);
+  const totalValue = inStockWines.reduce((acc, wine) => acc + (Number(wine.prezzo_acquisto || 0) * Number(wine.quantita || 1)), 0);
+  const statsMap = inStockWines.reduce((acc, wine) => {
     const tipo = wine.tipologia || 'Non specificato';
-    const qty = wine.quantita || 1;
-    acc[tipo] = (acc[tipo] || 0) + qty;
+    acc[tipo] = (acc[tipo] || 0) + Number(wine.quantita || 1);
     return acc;
   }, {});
 
@@ -156,40 +177,94 @@ function App() {
       </header>
 
       <main className="p-4 max-w-4xl mx-auto">
+        
+        {/* --- DASHBOARD --- */}
         {view === 'dashboard' && !selectedWine && !isEditing && !isTasting && (
-          <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard label="Totale" value={wines.reduce((s, w) => s + (w.quantita || 1), 0)} color="bg-white" />
-              <StatCard label="In Stock" value={wines.filter(w => w.in_stock).reduce((s, w) => s + (w.quantita || 1), 0)} color="bg-winelink-green text-white" />
-              {Object.entries(statsMap).map(([tipo, count]) => (
-                <StatCard key={tipo} label={tipo} value={count} color="bg-gray-100" />
-              ))}
+          <div className="space-y-8 animate-in fade-in duration-500">
+            
+            {/* 1. HERO CARD (STATISTICHE) */}
+            <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-gray-100">
+              <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4 text-center">Riepilogo Cantina</h3>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="text-center border-r border-gray-100">
+                  <p className="text-2xl font-black text-gray-800">{totalBottlesHistory}</p>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase">Totale</p>
+                </div>
+                <div className="text-center border-r border-gray-100">
+                  <p className="text-2xl font-black text-winelink-green">{inStockBottlesCount}</p>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase">Stock</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-black text-winelink-red">€{totalValue.toLocaleString()}</p>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase">Valore</p>
+                </div>
+              </div>
             </div>
 
+            {/* 2. BOTTONE INTERATTIVO (IL PROTAGONISTA) */}
+            <button 
+              onClick={askSommelier}
+              className="w-full py-5 bg-winelink-red text-white rounded-[1.5rem] font-black uppercase tracking-[0.1em] text-sm shadow-xl shadow-winelink-red/20 flex items-center justify-center gap-3 hover:bg-red-700 transition-all active:scale-95"
+            >
+              <Sparkles size={20} />
+              Indeciso su cosa bere?
+            </button>
+
+            {/* 3. TIPOLOGIE (NAVIGAZIONE) */}
             <div className="space-y-3">
-              <h2 className="text-xl font-semibold text-gray-700 flex items-center gap-2">Consigli del Sommelier</h2>
-              {wines.filter(w => w.in_stock).map(wine => {
-                // ✅ FIX DATA: Se manca la data di acquisto, non mostrare l'alert
-                if (!wine.data_acquisto) return null; 
-                
-                const alert = getSommelierAlert(wine.data_acquisto, wine.tipologia, wine.last_check_date, wine.anno_imbottigliamento);
-                return alert ? (
-                  <div key={wine.id} className={`${alert.bg} ${alert.color} p-4 rounded-xl border border-current flex items-start justify-between gap-3 shadow-sm mb-3 animate-pulse`}>
-                    <div className="flex items-start gap-3">
-                      <span className="text-2xl">{alert.icon}</span>
-                      <div><p className="font-bold">{wine.nome_vino}</p><p className="text-sm">{alert.message}</p></div>
-                    </div>
-                    <button onClick={() => handleSnooze(wine.id)} className="bg-white/80 hover:bg-white text-gray-700 text-xs font-bold py-2 px-3 rounded-lg border border-current transition-colors shadow-sm">✓ OK</button>
-                  </div>
-                ) : null;
-              })}
-              {wines.filter(w => w.in_stock && wine.data_acquisto && getSommelierAlert(w.data_acquisto, w.tipologia, w.last_check_date, w.anno_imbottigliamento)).length === 0 && (
-                <p className="text-gray-500 italic text-center py-4">Tutto in ordine in cantina! 🥂</p>
-              )}
+              <h2 className="text-sm font-black text-gray-700 uppercase tracking-widest flex items-center gap-2">
+                <span className="w-6 h-[2px] bg-winelink-red/20"></span>
+                Tipologie in Cantina
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(statsMap).map(([tipo, count]) => (
+                  <button 
+                    key={tipo} 
+                    onClick={() => { setFilterType(tipo); setView('inventory'); }}
+                    className="bg-white border border-gray-200 px-4 py-2 rounded-full shadow-sm flex items-center gap-2 transition-all hover:scale-105 hover:border-winelink-red active:scale-95 group"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-winelink-red group-hover:scale-125 transition-transform"></span>
+                    <span className="text-xs font-bold text-gray-700">{tipo}</span>
+                    <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-black group-hover:bg-winelink-red/10 group-hover:text-winelink-red transition-colors">
+                      {count}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* 4. ALERT (MANUTENZIONE - Ora in fondo e più compatti) */}
+            {inStockWines.some(wine => {
+              if (!wine.data_acquisto) return false;
+              return getSommelierAlert(wine.data_acquisto, wine.tipologia, wine.last_check_date, wine.anno_imbottigliamento) !== null;
+            }) && (
+              <div className="space-y-3 pt-4">
+                <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <span className="w-4 h-[1px] bg-gray-300"></span>
+                  Avvisi Sommelier
+                </h2>
+                {inStockWines.map(wine => {
+                  if (!wine.data_acquisto) return null;
+                  const alert = getSommelierAlert(wine.data_acquisto, wine.tipologia, wine.last_check_date, wine.anno_imbottigliamento);
+                  return alert ? (
+                    <div key={wine.id} className={`${alert.bg} ${alert.color} p-3 rounded-xl border border-current flex items-center justify-between gap-3 shadow-sm mb-2`}>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">{alert.icon}</span>
+                        <div>
+                          <p className="font-bold text-sm leading-tight">{wine.nome_vino}</p>
+                          <p className="text-[11px] opacity-80">{alert.message}</p>
+                        </div>
+                      </div>
+                      <button onClick={() => handleSnooze(wine.id)} className="bg-white/80 hover:bg-white text-gray-700 text-[10px] font-bold py-1 px-2 rounded-md border border-current transition-colors shadow-sm">OK</button>
+                    </div>
+                  ) : null;
+                })}
+              </div>
+            )}
           </div>
         )}
 
+        {/* --- CANTINA (INVENTORY) --- */}
         {view === 'inventory' && !selectedWine && !isEditing && !isTasting && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <h2 className="text-2xl font-bold text-gray-800">La mia Cantina</h2>
@@ -204,7 +279,7 @@ function App() {
               </select>
             </div>
             <div className="grid gap-3">
-              {wines.filter(w => w.in_stock).filter(w => (w.nome_vino?.toLowerCase().includes(searchTerm.toLowerCase()) || w.cantina?.toLowerCase().includes(searchTerm.toLowerCase())) && (filterType === 'Tutti' || w.tipologia === filterType)).map(wine => (
+              {inStockWines.filter(w => (w.nome_vino?.toLowerCase().includes(searchTerm.toLowerCase()) || w.cantina?.toLowerCase().includes(searchTerm.toLowerCase())) && (filterType === 'Tutti' || w.tipologia === filterType)).map(wine => (
                 <div key={wine.id} onClick={() => setSelectedWine(wine)} className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-winelink-red cursor-pointer hover:shadow-md hover:bg-gray-50 transition-all group">
                   <div className="flex justify-between items-start gap-2 mb-2">
                     <p className="font-bold text-lg leading-tight group-hover:text-winelink-red transition-colors flex-1">{wine.nome_vino}</p>
@@ -225,11 +300,12 @@ function App() {
           </div>
         )}
 
+        {/* --- DETTAGLIO VINO --- */}
         {selectedWine && !isEditing && !isViewingTasting && !isTasting && (
           <WineDetail wine={selectedWine} onBack={() => setSelectedWine(null)} onTast={() => setIsTasting(true)} onEdit={() => setIsEditing(true)} onSnooze={() => handleSnooze(selectedWine.id)} />
         )}
 
-        {/* ✅ FIX TASTO DEGUSTA ORA: Ora il componente TastingForm viene renderizzato correttamente */}
+        {/* --- FORM DEGUSTAZIONE --- */}
         {isTasting && selectedWine && (
           <div className="animate-in zoom-in duration-300">
              <TastingForm 
@@ -240,50 +316,84 @@ function App() {
           </div>
         )}
 
+        {/* --- POPUP DEGUSTAZIONE --- */}
         {isViewingTasting && selectedWine && (
-          <div className="animate-in zoom-in duration-300 space-y-6">
-            <button onClick={() => setIsViewingTasting(false)} className="flex items-center gap-2 text-winelink-red font-medium"><ArrowLeft size={20}/> Torna alla lista</button>
-            <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
-              <div className="p-6 bg-gray-800 text-white">
-                <h2 className="text-2xl font-bold">{selectedWine.nome_vino}</h2>
-                <p className="opacity-80">{selectedWine.cantina} • Degustazione del {tastingData?.data_degustazione || 'Data N/D'}</p>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
+              <div className="bg-gray-800 p-6 text-white relative">
+                <button onClick={() => setIsViewingTasting(false)} className="absolute right-4 top-4 text-white/60 hover:text-white">
+                  <X size={24} />
+                </button>
+                <h2 className="text-xl font-black uppercase tracking-tight">{selectedWine.nome_vino}</h2>
+                <p className="text-xs opacity-80 font-medium">{selectedWine.cantina} • {tastingData?.data_degustazione || 'N/D'}</p>
               </div>
-              <div className="p-6 space-y-6">
+              <div className="p-6 space-y-5 max-h-[60vh] overflow-y-auto">
                 {tastingData ? (
                   <>
-                    <div className="flex items-center gap-2 text-winelink-yellow">
-                      <Star className="fill-winelink-yellow" size={24} />
-                      <span className="text-2xl font-black">{tastingData.voto_stelle} / 5</span>
+                    <div className="flex items-center justify-between bg-winelink-yellow/10 p-3 rounded-2xl">
+                      <span className="text-sm font-bold text-winelink-yellow uppercase">Valutazione</span>
+                      <div className="flex items-center gap-1">
+                        <Star className="fill-winelink-yellow text-winelink-yellow" size={20} />
+                        <span className="text-lg font-black text-winelink-yellow">{tastingData.voto_stelle}</span>
+                      </div>
                     </div>
-                    <div className="space-y-4">
-                      <ExperienceSection icon={<Wine size={18}/>} label="Prime Impressioni" text={tastingData.impressioni_rapide} />
-                      <ExperienceSection icon={<CheckCircle2 size={18}/>} label="Analisi Visiva" text={tastingData.fis_visivo} />
-                      <ExperienceSection icon={<Wine size={18}/>} label="Analisi Olfattiva" text={tastingData.fis_olfattivo} />
-                      <ExperienceSection icon={<Wine size={18}/>} label="Analisi Gustativa" text={tastingData.fis_gustativo} />
-                      <ExperienceSection icon={<Wine size={18}/>} label="Conclusione" text={tastingData.fis_conclusione} />
-                      <ExperienceSection icon={<Calendar size={18}/>} label="Abbinamento" text={tastingData.abbinamento_cibo} />
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Dettaglio Sensoriale</p>
+                      <DetailRow label="Acidità" value={tastingData.acidita} />
+                      <DetailRow label="Tannicità" value={tastingData.tannicita} />
+                      <DetailRow label="Morbidezza" value={tastingData.morbidezza} />
+                      <DetailRow label="Intensità" value={tastingData.intensita} />
+                      <DetailRow label="Persistenza" value={tastingData.persistenza} />
+                      <DetailRow label="Alcolicità" value={tastingData.alcolicita} />
+                      <DetailRow label="Dolcezza" value={tastingData.dolcezza} />
                     </div>
+                    {tastingData.fis_conclusione && (
+                      <div className="pt-2">
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Note</p>
+                        <p className="text-sm italic text-gray-600 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                          "{tastingData.fis_conclusione}"
+                        </p>
+                      </div>
+                    )}
                   </>
                 ) : (
-                  <p className="text-center text-gray-500 py-10">Nessuna nota di degustazione registrata per questo vino.</p>
+                  <p className="text-center text-gray-500 py-10">Nessuna nota registrata.</p>
                 )}
+              </div>
+              <div className="p-4 bg-gray-50 text-center">
+                <button onClick={() => setIsViewingTasting(false)} className="w-full py-3 text-winelink-red font-black uppercase text-xs tracking-widest">Chiudi</button>
               </div>
             </div>
           </div>
         )}
 
+        {/* --- EDIT/ADD WINE FORM --- */}
         {isEditing && (
           <div className="max-w-2xl mx-auto">
-            <WineForm existingWine={selectedWine} isPremium={isPremium} winesCount={wines.length} onSave={() => { setIsEditing(false); fetchWines(); }} onCancel={() => { setIsEditing(false); setSelectedWine(null); }} />
+            <WineForm 
+              existingWine={selectedWine} 
+              isPremium={isPremium} 
+              winesCount={wines.length} 
+              onSave={() => { setIsEditing(false); fetchWines(); }} 
+              onCancel={() => { setIsEditing(false); setSelectedWine(null); }} 
+              onLimitReached={() => setView('profile')} 
+            />
           </div>
         )}
 
         {view === 'add' && !isEditing && !isTasting && (
           <div className="max-w-2xl mx-auto">
-            <WineForm isPremium={isPremium} winesCount={wines.length} onSave={() => { fetchWines(); setView('dashboard'); }} onCancel={() => setView('dashboard')} />
+            <WineForm 
+              isPremium={isPremium} 
+              winesCount={wines.length} 
+              onSave={() => { fetchWines(); setView('dashboard'); }} 
+              onCancel={() => setView('dashboard')} 
+              onLimitReached={() => setView('profile')} 
+            />
           </div>
         )}
 
+        {/* --- STORICO (BEVUTI) --- */}
         {view === 'history' && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <h2 className="text-2xl font-bold text-gray-800">Vini Degustati</h2>
@@ -297,7 +407,8 @@ function App() {
                 {Object.keys(statsMap).map(tipo => (<option key={tipo} value={tipo}>{tipo}</option>))}
               </select>
             </div>
-            <div className="grid gap-3">
+
+            <div className="grid gap-5">
               {wines
                 .filter(w => !w.in_stock)
                 .filter(w => 
@@ -309,22 +420,47 @@ function App() {
                   <div 
                     key={wine.id} 
                     onClick={() => { setSelectedWine(wine); openTastingExperience(wine); }}
-                    className="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-gray-400 cursor-pointer hover:shadow-md hover:bg-gray-50 transition-all group"
+                    className="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-100 cursor-pointer hover:shadow-md hover:border-winelink-red/30 transition-all group"
                   >
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="space-y-1">
-                        <p className="font-bold text-lg group-hover:text-winelink-red transition-colors">{wine.nome_vino}</p>
-                        <p className="text-xs text-gray-500">{wine.cantina} • {wine.anno_imbottigliamento}</p>
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <p className="font-black text-lg text-gray-800 group-hover:text-winelink-red transition-colors uppercase tracking-tight">
+                          {wine.nome_vino}
+                        </p>
+                        <p className="text-xs font-bold text-gray-500 uppercase">
+                          {wine.cantina} • {wine.anno_imbottigliamento}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-3">
+                           <span className="text-[11px] font-bold text-winelink-red flex items-center gap-1">
+                             🍇 {wine.uvaggio || 'N/D'}
+                           </span>
+                           <span className="text-[11px] font-bold text-winelink-red flex items-center gap-1">
+                             🍷 {wine.gradazione ? `${wine.gradazione}%` : 'N/D'}
+                           </span>
+                        </div>
                       </div>
-                      <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 rounded-full font-bold">{wine.tipologia}</span>
+                      <span className="text-[10px] bg-winelink-red/5 text-winelink-red border border-winelink-red/20 px-3 py-1 rounded-lg font-black uppercase tracking-wider">
+                        {wine.tipologia}
+                      </span>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-gray-50 flex justify-between items-center">
-                      <div className="flex items-center gap-1 text-xs text-gray-400">
-                        <Calendar size={14}/> Bevuto il: {wine.data_acquisto || 'N/D'}
+
+                    <div className="mt-4 pt-4 border-t border-gray-50 flex justify-between items-center">
+                      <div className="flex items-center gap-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wide">
+                        <Calendar size={14}/> {wine.data_acquisto || 'N/D'}
                       </div>
-                      <div className="text-winelink-red text-xs font-bold flex items-center gap-1">
-                        Vedi note <ArrowRight size={14}/>
+                      <div className="text-winelink-red text-[10px] font-black flex items-center gap-1 uppercase tracking-widest">
+                        Dettagli <ArrowRight size={14}/>
                       </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-1.5">
+                      <MiniScore label="A" val={wine.acidita} color="text-yellow-500" />
+                      <MiniScore label="T" val={wine.tannicita} color="text-red-700" />
+                      <MiniScore label="M" val={wine.morbidezza} color="text-blue-400" />
+                      <MiniScore label="I" val={wine.intensita} color="text-purple-500" />
+                      <MiniScore label="P" val={wine.persistenza} color="text-orange-500" />
+                      <MiniScore label="Al" val={wine.alcolicita} color="text-red-400" />
+                      <MiniScore label="D" val={wine.dolcezza} color="text-pink-400" />
                     </div>
                   </div>
                 ))}
@@ -335,10 +471,33 @@ function App() {
           </div>
         )}
 
+        {/* --- PROFILO --- */}
         {view === 'profile' && (
-          <Profile user={session.user} isPremium={isPremium} onLogout={handleLogout} />
+          <Profile user={session?.user} isPremium={isPremium} onLogout={handleLogout} />
         )}
       </main>
+
+      {/* MODALE SUGGERIMENTO (IL CONNOISSEUR) */}
+      {isSuggestionModalOpen && suggestion && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
+            <div className="bg-winelink-red p-8 text-white text-center relative">
+              <button onClick={() => setIsSuggestionModalOpen(false)} className="absolute right-4 top-4 text-white/60 hover:text-white">
+                <X size={24} />
+              </button>
+              <div className="text-5xl mb-4">{suggestion.icon}</div>
+              <h2 className="text-xl font-black uppercase tracking-tight">Il Sommelier consiglia:</h2>
+            </div>
+            <div className="p-8 text-center">
+              <p className="text-lg font-bold text-gray-800 mb-2">{suggestion.wineName}</p>
+              <p className="text-md italic text-gray-600 leading-relaxed">"{suggestion.message}"</p>
+            </div>
+            <div className="p-4 bg-gray-50 text-center">
+              <button onClick={() => setIsSuggestionModalOpen(false)} className="w-full py-3 text-winelink-red font-black uppercase text-xs tracking-widest">Capito! 🍷</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around p-3 shadow-2xl z-50">
         <NavButton active={view === 'dashboard' && !selectedWine && !isEditing && !isTasting} onClick={() => {setView('dashboard'); setSelectedWine(null); setIsEditing(false); setIsTasting(false);}} icon={<LayoutDashboard />} label="Home" />
@@ -350,23 +509,27 @@ function App() {
   );
 }
 
-function StatCard({ label, value, color }) {
-  return <div className={`${color} p-4 rounded-2xl shadow-sm border border-gray-100 text-center transition-transform hover:scale-100`}><p className="text-[10px] uppercase font-bold text-gray-500">{label}</p><p className="text-2xl font-black">{value}</p></div>;
-}
+// --- COMPONENTI DI SUPPORTO ---
 
 function NavButton({ active, onClick, icon, label }) {
   return <button onClick={onClick} className={`flex flex-col items-center gap-1 transition-colors ${active ? 'text-winelink-red' : 'text-gray-400'}`}>{icon}<span className="text-[10px] font-medium">{label}</span></button>;
 }
 
-function ExperienceSection({ icon, label, text }) {
+function MiniScore({ label, val, color }) {
+  if (val === undefined || val === null) return null; 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2 text-winelink-red font-bold text-sm">
-        {icon} {label}
-      </div>
-      <p className="text-gray-700 text-base bg-gray-50 p-3 rounded-xl border border-gray-100 leading-relaxed">
-        {text || 'Nessuna nota inserita.'}
-      </p>
+    <div className="flex items-center gap-0.5 bg-gray-50 px-1.5 py-0.5 rounded-md border border-gray-100">
+      <span className="text-[8px] font-black text-gray-400 uppercase">{label}</span>
+      <span className={`text-[9px] font-black ${color}`}>{val.toFixed(1)}</span>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }) {
+  return (
+    <div className="flex justify-between items-center border-b border-gray-50 pb-1">
+      <span className="text-xs font-bold text-gray-600">{label}</span>
+      <span className="text-xs font-black text-winelink-red">{value?.toFixed(1)}</span>
     </div>
   );
 }
