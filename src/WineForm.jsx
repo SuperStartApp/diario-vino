@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import { 
-  Save, X, Wine, MapPin, Calendar, DollarSign, Percent, Package, Info, Heart 
-} from 'lucide-react';
+import { Save, X, Wine, Package, Info, Heart } from 'lucide-react';
 
 const TIPOLOGIE = ['Rossi', 'Bianchi', 'Rosati', 'Bollicine', 'Champagne', 'Passito/Dolce', 'Macerato'];
 const REGIONI = ['Piemonte', 'Valle d\'Aosta', 'Lombardia', 'Trentino-Alto Adige', 'Veneto', 'Friuli Venezia Giulia', 'Liguria', 'Emilia-Romagna', 'Toscana', 'Umbria', 'Marche', 'Lazio', 'Abruzzo', 'Molise', 'Campania', 'Puglia', 'Basilicata', 'Calabria', 'Sardegna', 'Sicilia', 'Estero'];
 
 const DRAFT_KEY = 'winelink_wine_draft';
 
-// Aggiunto onLimitReached tra le proprietà (props)
 function WineForm({ existingWine, onSave, onCancel, isPremium, winesCount, onLimitReached }) {
   const [loading, setLoading] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
@@ -17,9 +14,7 @@ function WineForm({ existingWine, onSave, onCancel, isPremium, winesCount, onLim
   const [formData, setFormData] = useState(() => {
     if (existingWine) return existingWine;
     const savedDraft = localStorage.getItem(DRAFT_KEY);
-    if (savedDraft) {
-      try { return JSON.parse(savedDraft); } catch (e) { console.error(e); }
-    }
+    if (savedDraft) { try { return JSON.parse(savedDraft); } catch (e) { console.error(e); } }
     return {
       nome_vino: '', cantina: '', uvaggio: '', tipologia: 'Rossi', denominazione: '',
       anno_imbottigliamento: '', regione: 'Toscana', gradazione: '', prezzo_acquisto: '',
@@ -39,14 +34,18 @@ function WineForm({ existingWine, onSave, onCancel, isPremium, winesCount, onLim
   const cleanData = (data) => {
     const cleaned = { ...data };
     const numericFields = ['anno_imbottigliamento', 'gradazione', 'prezzo_acquisto', 'quantita'];
-    numericFields.forEach(field => { if (cleaned[field] === '' || cleaned[field] === undefined) cleaned[field] = null; });
+    numericFields.forEach(field => { 
+      if (cleaned[field] === '' || cleaned[field] === undefined || cleaned[field] === null) {
+        cleaned[field] = null; 
+      } else {
+        cleaned[field] = Number(cleaned[field]);
+      }
+    });
     return cleaned;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // ✅ BLOCCO 25 VINI
     if (!isPremium && winesCount >= 25 && !existingWine) {
       setShowLimitModal(true); 
       return;
@@ -55,6 +54,8 @@ function WineForm({ existingWine, onSave, onCancel, isPremium, winesCount, onLim
     setLoading(true);
     try {
       const dataToSave = cleanData(formData);
+      
+      // ✅ SCRIVIAMO nella tabella madre
       if (existingWine) {
         const { error } = await supabase.from('diar_wines').update(dataToSave).eq('id', existingWine.id);
         if (error) throw error;
@@ -71,7 +72,8 @@ function WineForm({ existingWine, onSave, onCancel, isPremium, winesCount, onLim
       }
       onSave();
     } catch (error) {
-      alert('Errore: ' + error.message);
+      console.error("Errore salvataggio:", error);
+      alert('Errore durante il salvataggio: ' + error.message);
     } finally { setLoading(false); }
   };
 
@@ -118,7 +120,6 @@ function WineForm({ existingWine, onSave, onCancel, isPremium, winesCount, onLim
         </form>
       </div>
 
-      {/* 🌟 MODAL POPUP 🌟 */}
       {showLimitModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full shadow-2xl text-center animate-in zoom-in duration-300 border border-gray-100">
@@ -134,19 +135,10 @@ function WineForm({ existingWine, onSave, onCancel, isPremium, winesCount, onLim
               </span>
             </p>
             <div className="space-y-3">
-              <button 
-                onClick={() => {
-                  setShowLimitModal(false);
-                  onLimitReached(); // 👈 Ora chiama la funzione che la App ci passa
-                }}
-                className="w-full bg-winelink-red text-white py-4 rounded-2xl font-bold hover:bg-red-800 transition-all shadow-lg flex items-center justify-center gap-2"
-              >
+              <button onClick={() => { setShowLimitModal(false); onLimitReached(); }} className="w-full bg-winelink-red text-white py-4 rounded-2xl font-bold hover:bg-red-800 transition-all shadow-lg flex items-center justify-center gap-2">
                 <Info size={18} /> Vai al Profilo
               </button>
-              <button 
-                onClick={() => setShowLimitModal(false)}
-                className="w-full bg-gray-100 text-gray-500 py-4 rounded-2xl font-semibold hover:bg-gray-200 transition-all"
-              >
+              <button onClick={() => setShowLimitModal(false)} className="w-full bg-gray-100 text-gray-500 py-4 rounded-2xl font-semibold hover:bg-gray-200 transition-all">
                 Annulla
               </button>
             </div>
