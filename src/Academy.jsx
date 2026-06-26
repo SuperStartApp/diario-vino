@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, GraduationCap, CheckCircle, Lock, Star, Trophy, AlertCircle, Wine } from 'lucide-react';
+import { ArrowLeft, GraduationCap, CheckCircle, Lock, Star, Trophy, AlertCircle, Wine, X } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 const LEVEL_TITLES = {
@@ -18,22 +18,17 @@ function Academy({ session, userProgress, fetchProgress }) {
   const [selectedOption, setSelectedOption] = useState(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const [mistakes, setMistakes] = useState(0);
+  const [userAnswers, setUserAnswers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [lastResult, setLastResult] = useState({ passed: false, score: 0 });
 
-  // Ricarica i progressi all'avvio
-  useEffect(() => {
-    fetchProgress();
-  }, []);
+  useEffect(() => { fetchProgress(); }, []);
 
   const startQuiz = async (category, level) => {
     if (level > 1) {
       const completedPrev = userProgress.find(p => p.category === category && p.level === level - 1 && p.completed);
-      if (!completedPrev) {
-        alert(`Devi prima superare il Livello ${level - 1}!`);
-        return;
-      }
+      if (!completedPrev) { alert(`Devi prima superare il Livello ${level - 1}!`); return; }
     }
     setLoading(true);
     try {
@@ -44,6 +39,7 @@ function Academy({ session, userProgress, fetchProgress }) {
       setMistakes(0);
       setSelectedOption(null);
       setIsAnswered(false);
+      setUserAnswers([]);
       setCurrentQuiz({ category, level });
       setAcademyView('quiz');
     } catch (e) { alert("Errore caricamento quiz"); } finally { setLoading(false); }
@@ -53,11 +49,10 @@ function Academy({ session, userProgress, fetchProgress }) {
     if (isAnswered) return;
     setSelectedOption(option);
     setIsAnswered(true);
+    setUserAnswers(prev => [...prev, option]);
 
     const currentQ = quizQuestions[currentQuestionIdx];
     const isCorrect = option === currentQ.correct_option;
-
-    // Usiamo una variabile locale per i calcoli immediati per evitare problemi di asincronia dello state
     let currentMistakesCount = mistakes;
     if (!isCorrect) currentMistakesCount += 1;
     setMistakes(currentMistakesCount);
@@ -68,26 +63,13 @@ function Academy({ session, userProgress, fetchProgress }) {
         setSelectedOption(null);
         setIsAnswered(false);
       } else {
-        // FINE TEST: Calcolo finale
         const totalMistakes = currentMistakesCount;
         const passed = totalMistakes <= 3;
         const score = quizQuestions.length - totalMistakes;
-        
-        // 1. Salvataggio su Supabase
-        const { error } = await supabase.from('diar_academy_progress').upsert({
-          user_id: session.user.id,
-          category: currentQuiz.category,
-          level: currentQuiz.level,
-          completed: passed,
-          score: score
-        });
-
-        if (error) {
-          console.error("Errore salvataggio:", error);
-          alert("Errore durante il salvataggio dei progressi.");
-        }
-
-        // 2. Mostra risultato
+        await supabase.from('diar_academy_progress').upsert(
+          { user_id: session.user.id, category: currentQuiz.category, level: currentQuiz.level, completed: passed, score: score },
+          { onConflict: 'user_id,category,level' }
+        );
         setLastResult({ passed, score });
         setShowResult(true);
       }
@@ -96,20 +78,13 @@ function Academy({ session, userProgress, fetchProgress }) {
 
   const closeResult = async () => {
     setShowResult(false);
-    // 3. IL TRUCCO: Aspettiamo un attimo che il database finisca di scrivere
-    // prima di chiedere i nuovi dati ad App.jsx
     setTimeout(async () => {
       await fetchProgress();
       setAcademyView('menu');
     }, 600); 
   };
 
-  if (loading) return (
-    <div className="flex flex-col justify-center items-center h-64 text-gray-500 font-bold gap-4">
-      <div className="animate-spin text-winelink-red"><GraduationCap size={40} /></div>
-      <p className="animate-pulse uppercase tracking-widest text-xs">Caricamento...</p>
-    </div>
-  );
+  if (loading) return <div className="flex justify-center items-center h-64 text-gray-500 font-bold">Caricamento... 🎓</div>;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
@@ -128,23 +103,13 @@ function Academy({ session, userProgress, fetchProgress }) {
                 </h3>
                 <div className="bg-winelink-red/10 text-winelink-red px-3 py-1 rounded-full text-[10px] font-black uppercase">Modulo {cat}</div>
               </div>
-              
               <div className="grid gap-3 relative z-10">
                 {[1, 2, 3, 4, 5].map(lvl => {
                   const completed = userProgress.some(p => p.category === cat && p.level === lvl && p.completed);
                   const isLocked = lvl > 1 && !userProgress.some(p => p.category === cat && p.level === lvl - 1 && p.completed);
                   const titleInfo = LEVEL_TITLES[lvl];
-
                   return (
-                    <button 
-                      key={lvl} 
-                      disabled={isLocked}
-                      onClick={() => startQuiz(cat, lvl)}
-                      className={`w-full p-4 rounded-2xl flex justify-between items-center transition-all border-2 ${
-                        completed ? 'bg-green-50 border-green-200' : 
-                        isLocked ? 'bg-gray-50 border-gray-100 opacity-60 cursor-not-allowed' : 'bg-white border-gray-100 hover:border-winelink-red shadow-sm active:scale-95'
-                      }`}
-                    >
+                    <button key={lvl} disabled={isLocked} onClick={() => startQuiz(cat, lvl)} className={`w-full p-4 rounded-2xl flex justify-between items-center transition-all border-2 ${completed ? 'bg-green-50 border-green-200' : isLocked ? 'bg-gray-50 border-gray-100 opacity-60 cursor-not-allowed' : 'bg-white border-gray-100 hover:border-winelink-red shadow-sm active:scale-95'}`}>
                       <div className="text-left flex items-center gap-3">
                         <span className="text-xl">{titleInfo.icon}</span>
                         <div>
@@ -153,9 +118,7 @@ function Academy({ session, userProgress, fetchProgress }) {
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${completed ? 'bg-green-500 text-white shadow-lg' : 'bg-gray-200 text-gray-500'}`}>
-                          {completed ? '✓' : lvl}
-                        </span>
+                        <span className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${completed ? 'bg-green-500 text-white shadow-lg' : 'bg-gray-200 text-gray-500'}`}>{completed ? '✓' : lvl}</span>
                         {isLocked && <Lock size={16} className="text-gray-300" />}
                       </div>
                     </button>
@@ -165,7 +128,7 @@ function Academy({ session, userProgress, fetchProgress }) {
             </div>
           ))}
         </div>
-      ) : (
+      ) : academyView === 'quiz' ? (
         <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-gray-100 animate-in zoom-in duration-300 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-2 bg-gray-100">
             <div className="h-full bg-winelink-red transition-all duration-500" style={{ width: `${((currentQuestionIdx + 1) / quizQuestions.length) * 100}%` }} />
@@ -185,7 +148,6 @@ function Academy({ session, userProgress, fetchProgress }) {
               else if (selectedOption === opt) btnClass += isCorrect ? "border-green-500 bg-green-100 text-green-700 shadow-lg" : "border-red-500 bg-red-100 text-red-700 shadow-lg";
               else if (isCorrect) btnClass += "border-green-500 bg-green-50 text-green-700 ring-2 ring-green-200";
               else btnClass += "border-gray-100 opacity-40 text-gray-400";
-
               return <button key={opt} onClick={() => handleAnswer(opt.toUpperCase())} className={btnClass}>{optionText}</button>;
             })}
           </div>
@@ -195,9 +157,37 @@ function Academy({ session, userProgress, fetchProgress }) {
             </div>
           </div>
         </div>
+      ) : (
+        <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-gray-100 animate-in slide-in-from-right duration-300">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-black text-gray-800 uppercase tracking-tight">Revisione Errori</h3>
+            <button onClick={() => setAcademyView('menu')} className="p-2 bg-gray-100 rounded-full text-gray-500"><X size={20}/></button>
+          </div>
+          <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
+            {quizQuestions.map((q, idx) => {
+              const userAns = userAnswers[idx];
+              if (userAns === q.correct_option) return null;
+              return (
+                <div key={idx} className="p-4 rounded-2xl bg-gray-50 border border-gray-100 space-y-3">
+                  <p className="text-sm font-bold text-gray-800 leading-snug">Domanda {idx + 1}: {q.question}</p>
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-red-100 text-red-700 text-xs font-bold border border-red-200">
+                      <span>Tua risposta: {q[`option_${userAns?.toLowerCase()}`] || 'Nessuna'}</span>
+                      <X size={14} />
+                    </div>
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-green-100 text-green-700 text-xs font-bold border border-green-200">
+                      <span>Corretta: {q[`option_${q.correct_option.toLowerCase()}`]}</span>
+                      <CheckCircle size={14} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <button onClick={() => setAcademyView('menu')} className="w-full mt-6 py-4 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest active:scale-95 transition-all">Torna al Menu</button>
+        </div>
       )}
 
-      {/* MODALE RISULTATO FINALE */}
       {showResult && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
           <div className="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl overflow-hidden text-center animate-in zoom-in duration-300">
@@ -206,9 +196,18 @@ function Academy({ session, userProgress, fetchProgress }) {
               <h2 className="text-3xl font-black uppercase tracking-tighter">{lastResult.passed ? 'Superato!' : 'Fallito'}</h2>
               <p className="text-sm opacity-90 font-medium">Punteggio: {lastResult.score} / {quizQuestions.length}</p>
             </div>
-            <div className="p-8">
-              <p className="text-gray-600 mb-6">{lastResult.passed ? "Ottimo lavoro! Il nuovo livello è sbloccato. 🍷" : "Riprova per sbloccare il badge!"}</p>
-              <button onClick={closeResult} className="w-full py-4 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all active:scale-95">Continua</button>
+            <div className="p-8 space-y-3">
+              <p className="text-gray-600 mb-6">
+                {lastResult.passed ? "Ottimo lavoro! Il nuovo livello è sbloccato. 🍷" : "Non è andata come speravi. Riprova per sbloccare il badge!"}
+              </p>
+              <button onClick={closeResult} className="w-full py-4 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all active:scale-95 shadow-lg">
+                {lastResult.passed ? 'Continua' : 'Riprova'}
+              </button>
+              {mistakes > 0 && (
+                <button onClick={() => { setShowResult(false); setAcademyView('review'); }} className="w-full py-4 bg-white text-gray-700 border-2 border-gray-200 rounded-2xl font-black uppercase tracking-widest hover:bg-gray-50 transition-all active:scale-95">
+                  Analizza Errori
+                </button>
+              )}
             </div>
           </div>
         </div>

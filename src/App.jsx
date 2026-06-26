@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { getSommelierAlert, getSommelierSuggestion } from './utils/sommelier';
 import { App as CapacitorApp } from '@capacitor/app'; 
-import { Wine, PlusCircle, History, LayoutDashboard, Search, Star, Calendar, CheckCircle2, ArrowLeft, ArrowRight, X, Sparkles, GraduationCap } from 'lucide-react';
+import { Wine, PlusCircle, History, LayoutDashboard, Search, Star, Calendar, CheckCircle2, ArrowLeft, ArrowRight, X, Sparkles, GraduationCap, Utensils, CloudSun, Users } from 'lucide-react';
 import WineForm from './WineForm'; 
 import WineDetail from './WineDetail';
 import TastingForm from './TastingForm';
@@ -26,6 +26,10 @@ function App() {
   const [suggestion, setSuggestion] = useState(null);
   const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
   const [userProgress, setUserProgress] = useState([]); 
+
+  // --- STATI PER IL QUIZ SOMMELIER ---
+  const [sommelierStep, setSommelierStep] = useState(0); // 0, 1, 2 = domande, 3 = risultato
+  const [sommelierChoices, setSommelierChoices] = useState({ occasion: '', food: '', climate: '' });
 
   async function fetchProfile(userId) {
     if (!userId) return;
@@ -113,10 +117,79 @@ function App() {
     setWines([]);
   }
 
-  const askSommelier = () => {
-    const suggestion = getSommelierSuggestion(inStockWines);
-    if (suggestion) { setSuggestion(suggestion); setIsSuggestionModalOpen(true); } 
-    else { alert("La tua cantina è vuota!"); }
+  // --- LOGICA SOMMELIER ESPERTO ---
+  const pairingMatrix = {
+    occasion: {
+      'Amici': { 'Bollicine': 10, 'Rosati': 8, 'Bianchi': 5, 'Rossi': 3 },
+      'Lavoro': { 'Bianchi': 10, 'Rossi': 5, 'Bollicine': 3, 'Rosati': 3 },
+      'Relax': { 'Rossi': 10, 'Bianchi': 8, 'Dolci/Passito': 7, 'Bollicine': 5 },
+      'Altro': { 'Bianchi': 5, 'Rossi': 5, 'Bollicine': 5, 'Rosati': 5 }
+    },
+    food: {
+      'Carne Rossa': { 'Rossi': 15, 'Rosati': 3, 'Bianchi': 1 },
+      'Carne Bianca': { 'Bianchi': 10, 'Rosati': 8, 'Rossi': 5 },
+      'Pesce': { 'Bianchi': 15, 'Bollicine': 12, 'Rosati': 8, 'Rossi': 1 },
+      'Verdure': { 'Bianchi': 10, 'Rosati': 10, 'Rossi': 3 },
+      'Formaggi Duri': { 'Rossi': 12, 'Dolci/Passito': 8, 'Bianchi': 5 },
+      'Formaggi Erborinati': { 'Dolci/Passito': 15, 'Rossi': 10, 'Bianchi': 1 },
+    },
+    climate: {
+      'Caldo': { 'Bianchi': 10, 'Bollicine': 10, 'Rosati': 8, 'Rossi': 2 },
+      'Freddo': { 'Rossi': 10, 'Dolci/Passito': 8, 'Bianchi': 3, 'Bollicine': 2 },
+      'Tepid': { 'Rossi': 5, 'Bianchi': 5, 'Rosati': 5, 'Bollicine': 5 }
+    }
+  };
+
+  const getSingularTipo = (tipo) => {
+    const map = {
+      'Rossi': 'vino rosso',
+      'Bianchi': 'vino bianco',
+      'Rosati': 'vino rosato',
+      'Bollicine': 'vino spumante',
+      'Champagne': 'champagne',
+      'Dolci/Passito': 'vino dolce'
+    };
+    return map[tipo] || `vino ${tipo}`;
+  };
+
+  const calculateBestWine = () => {
+    const { occasion, food, climate } = sommelierChoices;
+    let bestWine = null;
+    let maxScore = -1;
+
+    inStockWines.forEach(wine => {
+      let score = 0;
+      const tipo = wine.tipologia || 'Non specificato';
+      score += (pairingMatrix.occasion[occasion] && pairingMatrix.occasion[occasion][tipo]) || 0;
+      score += (pairingMatrix.food[food] && pairingMatrix.food[food][tipo]) || 0;
+      score += (pairingMatrix.climate[climate] && pairingMatrix.climate[climate][tipo]) || 0;
+
+      if (score > maxScore) {
+        maxScore = score;
+        bestWine = wine;
+      }
+    });
+
+    if (bestWine) {
+      setSuggestion({
+        wineName: bestWine.nome_vino,
+        icon: '🍷',
+        message: `Considerando la serata ${occasion} con ${food} e il clima ${climate}, questo ${getSingularTipo(bestWine.tipologia)} è la scelta più equilibrata nella tua cantina.`
+      });
+      setSommelierStep(3); // Passa alla fase di risultato
+    } else {
+      alert("La tua cantina è vuota!");
+      setIsSuggestionModalOpen(false);
+    }
+  };
+
+  const handleChoice = (key, value) => {
+    setSommelierChoices(prev => ({ ...prev, [key]: value }));
+    if (sommelierStep < 2) {
+      setSommelierStep(prev => prev + 1);
+    } else {
+      calculateBestWine();
+    }
   };
 
   const safeWines = Array.isArray(wines) ? wines : [];
@@ -160,7 +233,7 @@ function App() {
               </div>
             </div>
 
-            <button onClick={askSommelier} className="w-full py-5 bg-winelink-red text-white rounded-[1.5rem] font-black uppercase tracking-[0.1em] text-sm shadow-xl shadow-winelink-red/20 flex items-center justify-center gap-3 hover:bg-red-700 transition-all active:scale-95">
+            <button onClick={() => { setSommelierStep(0); setSommelierChoices({ occasion: '', food: '', climate: '' }); setIsSuggestionModalOpen(true); }} className="w-full py-5 bg-winelink-red text-white rounded-[1.5rem] font-black uppercase tracking-[0.1em] text-sm shadow-xl shadow-winelink-red/20 flex items-center justify-center gap-3 hover:bg-red-700 transition-all active:scale-95">
               <Sparkles size={20} /> Indeciso su cosa bere?
             </button>
 
@@ -371,21 +444,93 @@ function App() {
         )}
       </main>
 
-      {isSuggestionModalOpen && suggestion && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300">
-            <div className="bg-winelink-red p-8 text-white text-center relative">
-              <button onClick={() => setIsSuggestionModalOpen(false)} className="absolute right-4 top-4 text-white/60 hover:text-white"><X size={24} /></button>
-              <div className="text-5xl mb-4">{suggestion.icon}</div>
-              <h2 className="text-xl font-black uppercase tracking-tight">Il Sommelier consiglia:</h2>
+      {/* MODALE QUIZ SOMMELIER (POSIZIONAMENTO FISSATO) */}
+      {isSuggestionModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300 max-h-[90vh] flex flex-col">
+            <div className="bg-winelink-red p-6 text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2">
+                <Sparkles size={20} />
+                <h2 className="text-lg font-black uppercase tracking-tight">Sommelier Digitale</h2>
+              </div>
+              <button onClick={() => { setIsSuggestionModalOpen(false); setSommelierStep(0); setSuggestion(null); }} className="p-1 hover:bg-white/20 rounded-full transition-colors">
+                <X size={24} />
+              </button>
             </div>
-            <div className="p-8 text-center">
-              <p className="text-lg font-bold text-gray-800 mb-2">{suggestion.wineName}</p>
-              <p className="text-md italic text-gray-600 leading-relaxed">"{suggestion.message}"</p>
+            
+            <div className="p-8 overflow-y-auto flex-1">
+              {/* FASE 1: DOMANDE (Scompare quando sommelierStep === 3) */}
+              {sommelierStep < 3 && (
+                <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                  {sommelierStep === 0 && (
+                    <div className="space-y-6">
+                      <div className="text-center mb-4">
+                        <Users size={40} className="mx-auto text-winelink-red mb-2" />
+                        <p className="font-bold text-gray-800">Che tipo di serata è?</p>
+                      </div>
+                      <div className="grid gap-3">
+                        {['Amici', 'Lavoro', 'Relax', 'Altro'].map(opt => (
+                          <button key={opt} onClick={() => handleChoice('occasion', opt)} className="w-full py-3 px-4 rounded-xl border-2 border-gray-100 hover:border-winelink-red hover:bg-red-50 font-bold text-gray-700 transition-all active:scale-95 text-left flex justify-between items-center">
+                            {opt} <ArrowRight size={16} className="text-gray-300" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {sommelierStep === 1 && (
+                    <div className="space-y-6">
+                      <div className="text-center mb-4">
+                        <Utensils size={40} className="mx-auto text-winelink-red mb-2" />
+                        <p className="font-bold text-gray-800">Cosa state mangiando?</p>
+                      </div>
+                      <div className="grid gap-3">
+                        {['Carne Rossa', 'Carne Bianca', 'Pesce', 'Verdure', 'Formaggi Duri', 'Formaggi Erborinati'].map(opt => (
+                          <button key={opt} onClick={() => handleChoice('food', opt)} className="w-full py-3 px-4 rounded-xl border-2 border-gray-100 hover:border-winelink-red hover:bg-red-50 font-bold text-gray-700 transition-all active:scale-95 text-left flex justify-between items-center">
+                            {opt} <ArrowRight size={16} className="text-gray-300" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {sommelierStep === 2 && (
+                    <div className="space-y-6">
+                      <div className="text-center mb-4">
+                        <CloudSun size={40} className="mx-auto text-winelink-red mb-2" />
+                        <p className="font-bold text-gray-800">Com'è il clima esterno?</p>
+                      </div>
+                      <div className="grid gap-3">
+                        {['Caldo', 'Freddo', 'Tepid'].map(opt => (
+                          <button key={opt} onClick={() => handleChoice('climate', opt)} className="w-full py-3 px-4 rounded-xl border-2 border-gray-100 hover:border-winelink-red hover:bg-red-50 font-bold text-gray-700 transition-all active:scale-95 text-left flex justify-between items-center">
+                            {opt} <ArrowRight size={16} className="text-gray-300" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* FASE 2: RISULTATO (Appare solo quando sommelierStep === 3) */}
+              {sommelierStep === 3 && suggestion && (
+                <div className="text-center space-y-6 animate-in zoom-in duration-300">
+                  <div className="text-6xl mb-2">{suggestion.icon}</div>
+                  <h2 className="text-xl font-black text-gray-800 uppercase tracking-tight">Il Sommelier consiglia:</h2>
+                  <p className="text-2xl font-black text-winelink-red leading-tight">{suggestion.wineName}</p>
+                  <p className="text-sm italic text-gray-600 leading-relaxed px-2">"{suggestion.message}"</p>
+                </div>
+              )}
             </div>
-            <div className="p-4 bg-gray-50 text-center">
-              <button onClick={() => setIsSuggestionModalOpen(false)} className="w-full py-3 text-winelink-red font-black uppercase text-xs tracking-widest">Capito! 🍷</button>
-            </div>
+            
+            {/* TASTO CHIUDI (Sempre visibile se c'è un risultato) */}
+            {sommelierStep === 3 && (
+              <div className="p-6 bg-gray-50 text-center border-t border-gray-100 shrink-0">
+                <button onClick={() => { setIsSuggestionModalOpen(false); setSommelierStep(0); setSuggestion(null); }} className="w-full py-4 bg-winelink-red text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-700 transition-all active:scale-95 shadow-md">
+                  Capito! 🍷
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
