@@ -13,7 +13,7 @@ function TastingForm({ wine, onSave, onComplete, onCancel }) {
     intensita: 5.0,
     persistenza: 5.0,
     alcolicita: 5.0,
-    dolcezza: 5.0,
+    dolcezza: 1.0,
     note_veloci: ''
   });
 
@@ -140,11 +140,11 @@ function TastingForm({ wine, onSave, onComplete, onCancel }) {
             info="La percezione del calore alcolico in gola."
           />
           <SensorySlider 
-            label="Dolcezza" 
+            label="Dolcezza (Solo vini dolci o passiti)" 
             value={formData.dolcezza} 
             onChange={(v) => handleSliderChange('dolcezza', v)} 
             color="bg-pink-400" 
-            info="La percezione di zucchero o sapidità dolce."
+            info="Intensità di note dolci sul palato."
           />
         </div>
 
