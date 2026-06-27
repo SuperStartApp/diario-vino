@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
-// Usiamo SOLO le icone che sono già presenti nel tuo App.jsx per evitare il crash
-import { User, BookOpen, LogOut, Heart, ExternalLink, Info, Star, X, ArrowRight, GraduationCap } from 'lucide-react';
+// FIX: Import corretto senza i due slash //
+import { User, BookOpen, LogOut, Heart, ExternalLink, Info, Star, X, ArrowRight, GraduationCap, Award } from 'lucide-react';
 
-function Profile({ user, isPremium, onLogout, userProgress, statsMap }) {
+function Profile({ user, isPremium, onLogout, userProgress, statsMap, setView }) {
   const [activeModal, setActiveModal] = useState(null); 
-
-  // Protezione massima per le props
   const safeUserProgress = userProgress || [];
   const safeStatsMap = statsMap || {};
 
@@ -25,6 +23,16 @@ function Profile({ user, isPremium, onLogout, userProgress, statsMap }) {
     return { label: 'Maestro', color: 'bg-yellow-100 text-yellow-600', border: 'border-yellow-400' };
   };
 
+  const getGlobalLevel = () => {
+    let maxLevel = 0;
+    safeUserProgress.forEach(p => {
+      if (p.completed && p.level > maxLevel) maxLevel = p.level;
+    });
+    return maxLevel;
+  };
+
+  const globalLevel = getGlobalLevel();
+
   const guideContent = (
     <div className="space-y-4 text-left">
       <div className="flex items-start gap-3"><span className="text-xl">🍷</span><p className="text-sm text-gray-600"><strong>Aggiungi:</strong> Inserisci i tuoi vini per iniziare la collezione.</p></div>
@@ -40,17 +48,6 @@ function Profile({ user, isPremium, onLogout, userProgress, statsMap }) {
       <p className="text-sm text-gray-600 leading-relaxed">Uniamo la passione per l'enologia alla tecnologia.</p>
     </div>
   );
-
-  // Calcolo livello globale per il titolo
-  const getGlobalLevel = () => {
-    let maxLevel = 0;
-    safeUserProgress.forEach(p => {
-      if (p.completed && p.level > maxLevel) maxLevel = p.level;
-    });
-    return maxLevel;
-  };
-
-  const globalLevel = getGlobalLevel();
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
@@ -87,7 +84,7 @@ function Profile({ user, isPremium, onLogout, userProgress, statsMap }) {
         <Star size={40} className={globalLevel > 0 ? "text-yellow-400 fill-yellow-400" : "text-gray-600"} />
       </div>
 
-      {/* 3. ACCADEMY PROGRESS */}
+      {/* 3. PERCORSI ACADEMY */}
       <div className="space-y-3">
         <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest ml-2 flex items-center gap-2">
           <GraduationCap size={14}/> I tuoi Percorsi Academy
@@ -96,7 +93,6 @@ function Profile({ user, isPremium, onLogout, userProgress, statsMap }) {
           {['general', 'territory', 'pairing'].map(pathId => {
             const pathNames = { general: 'Basi del Vino', territory: 'Territori', pairing: 'Abbinamenti' };
             const pathIcons = { general: '🍇', territory: '🗺️', pairing: '🍽️' };
-            
             const completedLevels = safeUserProgress
               .filter(p => p.category === pathId && p.completed)
               .map(p => p.level);
@@ -126,7 +122,7 @@ function Profile({ user, isPremium, onLogout, userProgress, statsMap }) {
       {/* 4. CANTINA BADGES */}
       <div className="space-y-3">
         <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest ml-2 flex items-center gap-2">
-          <Star size={14}/> Titoli di Collezione
+          <Award size={14}/> Titoli di Collezione
         </h3>
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-gray-100">
           <div className="grid grid-cols-2 gap-3">
@@ -161,12 +157,24 @@ function Profile({ user, isPremium, onLogout, userProgress, statsMap }) {
           <div className="flex items-center gap-3"><Info size={20} className="text-winelink-red" /><span className="text-sm font-bold text-gray-700">Chi Siamo</span></div>
           <X size={16} className="text-gray-300 rotate-45" />
         </button>
+        {!isPremium && (
+          <div className="bg-gradient-to-br from-winelink-red to-red-900 p-6 rounded-[2rem] shadow-lg text-white space-y-4 mt-6">
+            <div className="flex items-center gap-2 font-bold text-lg"><Star size={20} className="fill-white" /> WineDiary è un'App Gratuita</div>
+            <p className="text-sm opacity-90">Sblocca la tua cantina e inserisci tutte le bottiglie che desideri senza limiti.</p>
+            <button 
+              onClick={() => setView('premium_unlock')} 
+              className="w-full bg-white text-winelink-red p-3 rounded-xl font-bold text-center block hover:bg-gray-100 transition-all shadow-md active:scale-95"
+            >
+              Attiva Premium Gratuitamente ❤️
+            </button>
+          </div>
+        )}
         <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 p-4 text-red-600 font-bold bg-white rounded-2xl border border-gray-100 shadow-sm active:scale-95 transition-all mt-4">
           <LogOut size={20}/> Esci dall'Account
         </button>
       </div>
 
-      {/* 6. FOOTER */}
+      {/* FOOTER */}
       <div className="text-center pt-8 pb-4 space-y-3">
         <p className="text-xs text-gray-400 flex items-center justify-center gap-1">App progettata con il <Heart size={12} className="text-red-500 fill-red-500" /> da <span className="font-bold">SuPeR</span></p>
         <a href="https://www.winelink.info/support" target="_blank" rel="noreferrer" className="text-xs text-winelink-red font-bold flex items-center justify-center gap-1 hover:underline">Supporto e Info <ExternalLink size={12}/></a>

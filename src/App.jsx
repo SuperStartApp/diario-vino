@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import { getSommelierAlert, getSommelierSuggestion } from './utils/sommelier';
 import { App as CapacitorApp } from '@capacitor/app'; 
-import { Wine, PlusCircle, History, LayoutDashboard, Search, Star, Calendar, CheckCircle2, ArrowLeft, ArrowRight, X, Sparkles, GraduationCap, Utensils, CloudSun, Users } from 'lucide-react';
+import { Wine, PlusCircle, History, LayoutDashboard, Search, Star, Calendar, CheckCircle2, ArrowLeft, ArrowRight, X, Sparkles, GraduationCap, Utensils, CloudSun, Users, Heart, Coffee, Check } from 'lucide-react';
 import WineForm from './WineForm'; 
 import WineDetail from './WineDetail';
 import TastingForm from './TastingForm';
@@ -27,8 +27,13 @@ function App() {
   const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
   const [userProgress, setUserProgress] = useState([]); 
 
-  // --- STATI PER IL QUIZ SOMMELIER ---
-  const [sommelierStep, setSommelierStep] = useState(0); // 0, 1, 2 = domande, 3 = risultato
+  // --- STATI PREMIUM ---
+  const [mailingConsent, setMailingConsent] = useState(false);
+  const [showDonationModal, setShowDonationModal] = useState(false);
+  const [unlockLoading, setUnlockLoading] = useState(false);
+
+  // --- STATI SOMMELIER ---
+  const [sommelierStep, setSommelierStep] = useState(0); 
   const [sommelierChoices, setSommelierChoices] = useState({ occasion: '', food: '', climate: '' });
 
   async function fetchProfile(userId) {
@@ -117,7 +122,26 @@ function App() {
     setWines([]);
   }
 
-  // --- LOGICA SOMMELIER ESPERTO ---
+  // --- LOGICA SBLOCCO PREMIUM ---
+  async function activatePremium() {
+    setUnlockLoading(true);
+    try {
+      const { error } = await supabase
+        .from('diar_profiles')
+        .update({ is_premium: true, mailing_list: mailingConsent })
+        .eq('id', session.user.id);
+      
+      if (error) throw error;
+      
+      setIsPremium(true);
+      setShowDonationModal(true); // Mostra richiesta donazione
+    } catch (e) {
+      alert("Errore durante l'attivazione. Riprova!");
+    } finally {
+      setUnlockLoading(false);
+    }
+  }
+
   const pairingMatrix = {
     occasion: {
       'Amici': { 'Bollicine': 10, 'Rosati': 8, 'Bianchi': 5, 'Rossi': 3 },
@@ -141,14 +165,7 @@ function App() {
   };
 
   const getSingularTipo = (tipo) => {
-    const map = {
-      'Rossi': 'vino rosso',
-      'Bianchi': 'vino bianco',
-      'Rosati': 'vino rosato',
-      'Bollicine': 'vino spumante',
-      'Champagne': 'champagne',
-      'Dolci/Passito': 'vino dolce'
-    };
+    const map = { 'Rossi': 'vino rosso', 'Bianchi': 'vino bianco', 'Rosati': 'vino rosato', 'Bollicine': 'vino spumante', 'Champagne': 'champagne', 'Dolci/Passito': 'vino dolce' };
     return map[tipo] || `vino ${tipo}`;
   };
 
@@ -156,18 +173,13 @@ function App() {
     const { occasion, food, climate } = sommelierChoices;
     let bestWine = null;
     let maxScore = -1;
-
     inStockWines.forEach(wine => {
       let score = 0;
       const tipo = wine.tipologia || 'Non specificato';
       score += (pairingMatrix.occasion[occasion] && pairingMatrix.occasion[occasion][tipo]) || 0;
       score += (pairingMatrix.food[food] && pairingMatrix.food[food][tipo]) || 0;
       score += (pairingMatrix.climate[climate] && pairingMatrix.climate[climate][tipo]) || 0;
-
-      if (score > maxScore) {
-        maxScore = score;
-        bestWine = wine;
-      }
+      if (score > maxScore) { maxScore = score; bestWine = wine; }
     });
 
     if (bestWine) {
@@ -176,7 +188,7 @@ function App() {
         icon: '🍷',
         message: `Considerando la serata ${occasion} con ${food} e il clima ${climate}, questo ${getSingularTipo(bestWine.tipologia)} è la scelta più equilibrata nella tua cantina.`
       });
-      setSommelierStep(3); // Passa alla fase di risultato
+      setSommelierStep(3);
     } else {
       alert("La tua cantina è vuota!");
       setIsSuggestionModalOpen(false);
@@ -185,11 +197,8 @@ function App() {
 
   const handleChoice = (key, value) => {
     setSommelierChoices(prev => ({ ...prev, [key]: value }));
-    if (sommelierStep < 2) {
-      setSommelierStep(prev => prev + 1);
-    } else {
-      calculateBestWine();
-    }
+    if (sommelierStep < 2) setSommelierStep(prev => prev + 1);
+    else calculateBestWine();
   };
 
   const safeWines = Array.isArray(wines) ? wines : [];
@@ -433,6 +442,48 @@ function App() {
           </div>
         )}
 
+        {/* VISTA SBLOCCO PREMIUM */}
+        {view === 'premium_unlock' && (
+          <div className="max-w-md mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-500">
+            <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 text-center space-y-6">
+              <div className="bg-winelink-red/10 w-20 h-20 rounded-full flex items-center justify-center text-winelink-red mx-auto shadow-inner">
+                <Sparkles size={40} />
+              </div>
+              <h2 className="text-2xl font-black text-gray-800 uppercase tracking-tight">Sblocca l'Esperienza Full</h2>
+              <p className="text-gray-600 leading-relaxed">
+                WineDiary è un progetto nato dalla pura passione per l'enologia. Per mantenere l'app gratuita e senza pubblicità, l'accesso Premium è aperto a tutta la community.
+              </p>
+              
+              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-start gap-3 text-left">
+                <div className="mt-1">
+                  <input 
+                    type="checkbox" 
+                    id="mailing" 
+                    className="w-4 h-4 accent-winelink-red"
+                    checked={mailingConsent}
+                    onChange={(e) => setMailingConsent(e.target.checked)}
+                  />
+                </div>
+                <label htmlFor="mailing" className="text-xs text-gray-500 leading-tight cursor-pointer">
+                  Acconsento all'utilizzo della mia email per ricevere aggiornamenti sul progetto. 
+                  <span className="block font-bold text-gray-700 mt-1">Non venderemo mai i tuoi dati.</span>
+                </label>
+              </div>
+
+              <button 
+                onClick={activatePremium}
+                disabled={unlockLoading}
+                className="w-full py-4 bg-winelink-red text-white rounded-2xl font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+              >
+                {unlockLoading ? 'Attivazione...' : 'Attiva Premium Gratuitamente'}
+              </button>
+              <button onClick={() => setView('profile')} className="text-xs text-gray-400 font-bold uppercase tracking-widest hover:text-gray-600">
+                Annulla e torna al profilo
+              </button>
+            </div>
+          </div>
+        )}
+
         {view === 'profile' && (
           <Profile 
             user={session?.user} 
@@ -440,11 +491,48 @@ function App() {
             onLogout={handleLogout} 
             userProgress={userProgress} 
             statsMap={statsMap} 
+            setView={setView} 
           />
         )}
       </main>
 
-      {/* MODALE QUIZ SOMMELIER (POSIZIONAMENTO FISSATO) */}
+      {/* MODALE DONAZIONE (Sblocco completato) */}
+{showDonationModal && (
+  <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300 text-center">
+      <div className="bg-green-500 p-8 text-white relative">
+        <div className="text-5xl mb-4">🎉</div>
+        <h2 className="text-xl font-black uppercase tracking-tight">Premium Attivato!</h2>
+        <p className="text-sm opacity-90">Ora hai accesso illimitato alla tua cantina.</p>
+      </div>
+      <div className="p-8 space-y-6">
+        <div className="space-y-3">
+          <p className="text-gray-800 font-bold">Sostieni il Progetto ❤️</p>
+          <p className="text-sm text-gray-600 italic">
+            WineDiary è un lavoro di passione. Se ti piace e vuoi aiutarci a migliorarlo, ogni piccolo contributo è prezioso.
+            <br /><strong>Basta anche solo un euro. Grazie!.</strong>
+          </p>
+        </div>
+        <a 
+          href="https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=ds.salvatori@libero.it" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-md active:scale-95"
+        >
+          <Coffee size={18} /> Offri un caffè al dev
+        </a>
+        <button 
+          onClick={() => { setShowDonationModal(false); setView('profile'); }} 
+          className="w-full py-4 bg-winelink-red text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-700 transition-all active:scale-95 shadow-md"
+        >
+          Goditi il tuo account Premium
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+      {/* MODALE QUIZ SOMMELIER */}
       {isSuggestionModalOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-300 max-h-[90vh] flex flex-col">
@@ -459,7 +547,6 @@ function App() {
             </div>
             
             <div className="p-8 overflow-y-auto flex-1">
-              {/* FASE 1: DOMANDE (Scompare quando sommelierStep === 3) */}
               {sommelierStep < 3 && (
                 <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
                   {sommelierStep === 0 && (
@@ -512,7 +599,6 @@ function App() {
                 </div>
               )}
 
-              {/* FASE 2: RISULTATO (Appare solo quando sommelierStep === 3) */}
               {sommelierStep === 3 && suggestion && (
                 <div className="text-center space-y-6 animate-in zoom-in duration-300">
                   <div className="text-6xl mb-2">{suggestion.icon}</div>
@@ -523,7 +609,6 @@ function App() {
               )}
             </div>
             
-            {/* TASTO CHIUDI (Sempre visibile se c'è un risultato) */}
             {sommelierStep === 3 && (
               <div className="p-6 bg-gray-50 text-center border-t border-gray-100 shrink-0">
                 <button onClick={() => { setIsSuggestionModalOpen(false); setSommelierStep(0); setSuggestion(null); }} className="w-full py-4 bg-winelink-red text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-700 transition-all active:scale-95 shadow-md">
