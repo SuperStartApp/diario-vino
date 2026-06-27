@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, GraduationCap, CheckCircle, Lock, Star, Trophy, AlertCircle, Wine, X } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
+// [CONFIGURAZIONE] Titoli per i livelli
 const LEVEL_TITLES = {
   1: { title: 'Sognatore', subtitle: 'Iniziante', color: 'bg-blue-100 text-blue-700', icon: '🌱' },
   2: { title: 'Esploratore', subtitle: 'Appassionato', color: 'bg-green-100 text-green-700', icon: '🔍' },
@@ -9,6 +10,16 @@ const LEVEL_TITLES = {
   4: { title: 'Wine Master', subtitle: 'Esperto', color: 'bg-orange-100 text-orange-700', icon: '🎓' },
   5: { title: 'Gran Maestro', subtitle: 'Leggenda', color: 'bg-purple-100 text-purple-700', icon: '👑' },
 };
+
+// [CONFIGURAZIONE] Tutti i 6 percorsi sono già ATTIVI qui sotto
+const PATHS = [
+  { id: 'general', name: 'Basi del Vino', label: 'Modulo General' },
+  { id: 'territory', name: 'Territori & Vigneti', label: 'Modulo Territori' },
+  { id: 'pairing', name: 'L\'Arte dell\'Abbinamento', label: 'Modulo Abbinamenti' },
+  { id: 'vinification', name: 'Vino e Vinificazione', label: 'Modulo Enologia' },
+  { id: 'sensory', name: 'Analisi Sensoriale', label: 'Modulo Degustazione' },
+  { id: 'service', name: 'Servizio e Etichetta', label: 'Modulo Sommelier' },
+];
 
 function Academy({ session, userProgress, fetchProgress }) {
   const [academyView, setAcademyView] = useState('menu'); 
@@ -42,7 +53,7 @@ function Academy({ session, userProgress, fetchProgress }) {
       setUserAnswers([]);
       setCurrentQuiz({ category, level });
       setAcademyView('quiz');
-    } catch (e) { alert("Errore caricamento quiz"); } finally { setLoading(false); }
+    } catch (e) { alert("Errore caricamento quiz. Assicurati di aver inserito le domande nel DB!"); } finally { setLoading(false); }
   };
 
   const handleAnswer = async (option) => {
@@ -66,6 +77,7 @@ function Academy({ session, userProgress, fetchProgress }) {
         const totalMistakes = currentMistakesCount;
         const passed = totalMistakes <= 3;
         const score = quizQuestions.length - totalMistakes;
+        
         await supabase.from('diar_academy_progress').upsert(
           { user_id: session.user.id, category: currentQuiz.category, level: currentQuiz.level, completed: passed, score: score },
           { onConflict: 'user_id,category,level' }
@@ -76,12 +88,10 @@ function Academy({ session, userProgress, fetchProgress }) {
     }, 1500);
   };
 
-  const closeResult = async () => {
+  const resetToMenu = async () => {
     setShowResult(false);
-    setTimeout(async () => {
-      await fetchProgress();
-      setAcademyView('menu');
-    }, 600); 
+    setAcademyView('menu');
+    await fetchProgress(); 
   };
 
   if (loading) return <div className="flex justify-center items-center h-64 text-gray-500 font-bold">Caricamento... 🎓</div>;
@@ -95,21 +105,28 @@ function Academy({ session, userProgress, fetchProgress }) {
 
       {academyView === 'menu' ? (
         <div className="grid gap-8">
-          {['general', 'territory', 'pairing'].map(cat => (
-            <div key={cat} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-6 relative overflow-hidden">
+          {PATHS.map(path => (
+            <div key={path.id} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-6 relative overflow-hidden">
               <div className="flex justify-between items-center relative z-10">
                 <h3 className="text-xl font-black text-gray-800 uppercase tracking-tight">
-                  {cat === 'general' ? 'Basi del Vino' : cat === 'territory' ? 'Territori & Vigneti' : 'L\'Arte dell\'Abbinamento'}
+                  {path.name}
                 </h3>
-                <div className="bg-winelink-red/10 text-winelink-red px-3 py-1 rounded-full text-[10px] font-black uppercase">Modulo {cat}</div>
+                <div className="bg-winelink-red/10 text-winelink-red px-3 py-1 rounded-full text-[10px] font-black uppercase">
+                  {path.label}
+                </div>
               </div>
               <div className="grid gap-3 relative z-10">
                 {[1, 2, 3, 4, 5].map(lvl => {
-                  const completed = userProgress.some(p => p.category === cat && p.level === lvl && p.completed);
-                  const isLocked = lvl > 1 && !userProgress.some(p => p.category === cat && p.level === lvl - 1 && p.completed);
+                  const completed = userProgress.some(p => p.category === path.id && p.level === lvl && p.completed);
+                  const isLocked = lvl > 1 && !userProgress.some(p => p.category === path.id && p.level === lvl - 1 && p.completed);
                   const titleInfo = LEVEL_TITLES[lvl];
                   return (
-                    <button key={lvl} disabled={isLocked} onClick={() => startQuiz(cat, lvl)} className={`w-full p-4 rounded-2xl flex justify-between items-center transition-all border-2 ${completed ? 'bg-green-50 border-green-200' : isLocked ? 'bg-gray-50 border-gray-100 opacity-60 cursor-not-allowed' : 'bg-white border-gray-100 hover:border-winelink-red shadow-sm active:scale-95'}`}>
+                    <button 
+                      key={lvl} 
+                      disabled={isLocked} 
+                      onClick={() => startQuiz(path.id, lvl)} 
+                      className={`w-full p-4 rounded-2xl flex justify-between items-center transition-all border-2 ${completed ? 'bg-green-50 border-green-200' : isLocked ? 'bg-gray-50 border-gray-100 opacity-60 cursor-not-allowed' : 'bg-white border-gray-100 hover:border-winelink-red shadow-sm active:scale-95'}`}
+                    >
                       <div className="text-left flex items-center gap-3">
                         <span className="text-xl">{titleInfo.icon}</span>
                         <div>
@@ -184,7 +201,7 @@ function Academy({ session, userProgress, fetchProgress }) {
               );
             })}
           </div>
-          <button onClick={() => setAcademyView('menu')} className="w-full mt-6 py-4 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest active:scale-95 transition-all">Torna al Menu</button>
+          <button onClick={resetToMenu} className="w-full mt-6 py-4 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest active:scale-95 transition-all">Torna al Menu</button>
         </div>
       )}
 
@@ -200,7 +217,7 @@ function Academy({ session, userProgress, fetchProgress }) {
               <p className="text-gray-600 mb-6">
                 {lastResult.passed ? "Ottimo lavoro! Il nuovo livello è sbloccato. 🍷" : "Non è andata come speravi. Riprova per sbloccare il badge!"}
               </p>
-              <button onClick={closeResult} className="w-full py-4 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all active:scale-95 shadow-lg">
+              <button onClick={resetToMenu} className="w-full py-4 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all active:scale-95 shadow-lg">
                 {lastResult.passed ? 'Continua' : 'Riprova'}
               </button>
               {mistakes > 0 && (

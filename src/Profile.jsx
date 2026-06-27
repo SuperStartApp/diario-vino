@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
-// FIX: Import corretto senza i due slash //
 import { User, BookOpen, LogOut, Heart, ExternalLink, Info, Star, X, ArrowRight, GraduationCap, Award } from 'lucide-react';
+
+// [CONFIGURAZIONE] Tutti i 6 percorsi sono già ATTIVI qui sotto
+const ACADEMY_PATHS = [
+  { id: 'general', name: 'Basi del Vino', icon: '🍇' },
+  { id: 'territory', name: 'Territori & Vigneti', icon: '🗺️' },
+  { id: 'pairing', name: 'L\'Arte dell\'Abbinamento', icon: '🍽️' },
+  { id: 'vinification', name: 'Vino e Vinificazione', icon: '🧪' },
+  { id: 'sensory', name: 'Analisi Sensoriale', icon: '👃' },
+  { id: 'service', name: 'Servizio e Etichetta', icon: '🤵' },
+];
 
 function Profile({ user, isPremium, onLogout, userProgress, statsMap, setView }) {
   const [activeModal, setActiveModal] = useState(null); 
@@ -23,15 +32,21 @@ function Profile({ user, isPremium, onLogout, userProgress, statsMap, setView })
     return { label: 'Maestro', color: 'bg-yellow-100 text-yellow-600', border: 'border-yellow-400' };
   };
 
-  const getGlobalLevel = () => {
-    let maxLevel = 0;
-    safeUserProgress.forEach(p => {
-      if (p.completed && p.level > maxLevel) maxLevel = p.level;
-    });
-    return maxLevel;
+  // [CORREZIONE: LOGICA TITOLO ONORIFICO BASATA SUL PROGRESSO GLOBALE]
+  const getGlobalPrestige = () => {
+    const totalPossibleLevels = ACADEMY_PATHS.length * 5; // 6 percorsi * 5 livelli = 30
+    const completedCount = safeUserProgress.filter(p => p.completed).length;
+    const completionPercentage = (completedCount / totalPossibleLevels) * 100;
+
+    if (completedCount === 0) return 'Novizio';
+    if (completionPercentage < 15) return 'Sognatore';
+    if (completionPercentage < 40) return 'Esploratore';
+    if (completionPercentage < 65) return 'Custode';
+    if (completionPercentage < 85) return 'Wine Master';
+    return 'Gran Maestro';
   };
 
-  const globalLevel = getGlobalLevel();
+  const prestigeTitle = getGlobalPrestige();
 
   const guideContent = (
     <div className="space-y-4 text-left">
@@ -73,15 +88,10 @@ function Profile({ user, isPremium, onLogout, userProgress, statsMap, setView })
         <div>
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Titolo Onorifico</p>
           <h3 className="text-xl font-black uppercase tracking-tight">
-            {globalLevel > 0 ? (
-              globalLevel === 1 ? 'Sognatore' : 
-              globalLevel === 2 ? 'Esploratore' : 
-              globalLevel === 3 ? 'Custode' : 
-              globalLevel === 4 ? 'Wine Master' : 'Gran Maestro'
-            ) : 'Novizio'}
+            {prestigeTitle}
           </h3>
         </div>
-        <Star size={40} className={globalLevel > 0 ? "text-yellow-400 fill-yellow-400" : "text-gray-600"} />
+        <Star size={40} className={prestigeTitle !== 'Novizio' ? "text-yellow-400 fill-yellow-400" : "text-gray-600"} />
       </div>
 
       {/* 3. PERCORSI ACADEMY */}
@@ -90,20 +100,18 @@ function Profile({ user, isPremium, onLogout, userProgress, statsMap, setView })
           <GraduationCap size={14}/> I tuoi Percorsi Academy
         </h3>
         <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden">
-          {['general', 'territory', 'pairing'].map(pathId => {
-            const pathNames = { general: 'Basi del Vino', territory: 'Territori', pairing: 'Abbinamenti' };
-            const pathIcons = { general: '🍇', territory: '🗺️', pairing: '🍽️' };
+          {ACADEMY_PATHS.map(path => {
             const completedLevels = safeUserProgress
-              .filter(p => p.category === pathId && p.completed)
+              .filter(p => p.category === path.id && p.completed)
               .map(p => p.level);
             const currentPathLevel = completedLevels.length > 0 ? Math.max(...completedLevels) : 0;
 
             return (
-              <div key={pathId} className="flex items-center justify-between p-4 border-b border-gray-50 last:border-0">
+              <div key={path.id} className="flex items-center justify-between p-4 border-b border-gray-50 last:border-0">
                 <div className="flex items-center gap-3">
-                  <span className="text-lg">{pathIcons[pathId]}</span>
+                  <span className="text-lg">{path.icon}</span>
                   <div>
-                    <p className="text-sm font-bold text-gray-800">{pathNames[pathId]}</p>
+                    <p className="text-sm font-bold text-gray-800">{path.name}</p>
                     <p className="text-[10px] text-gray-400 font-bold uppercase">Livello {currentPathLevel}</p>
                   </div>
                 </div>
